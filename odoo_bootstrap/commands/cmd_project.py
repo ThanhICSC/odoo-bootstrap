@@ -25,6 +25,35 @@ logger = get_logger("project")
 console = Console()
 
 
+def _detect_enterprise(version: int) -> bool:
+    """Return True if enterprise modules exist for this version."""
+    ent_dir = WORKSPACE_ROOT / "versions" / str(version) / "enterprise"
+    if not ent_dir.exists():
+        return False
+    # Co it nhat 1 module hop le
+    for item in ent_dir.iterdir():
+        if item.is_dir() and (item / "__manifest__.py").exists():
+            return True
+    return False
+
+
+def _find_free_port(base_port: int, used_ports: list[int]) -> int:
+    """Find next free port starting from base_port."""
+    port = base_port
+    while port in used_ports:
+        port += 1
+    return port
+
+
+def _get_used_ports(config_manager) -> list[int]:
+    """Get all ports already used by existing projects."""
+    ports = []
+    for proj in config_manager.list_projects():
+        ports.append(proj.odoo_port)
+        ports.append(proj.odoo_port + 3)  # longpoll
+    return ports
+
+
 def run_create_project(
     name: str,
     version: int,
@@ -32,23 +61,36 @@ def run_create_project(
     db_name: str = "",
     db_user: str = "odoo",
     db_password: str = "odoo",
+    port: int = 0,
 ) -> None:
-    """Create a new Odoo project with all required files."""
+    """Create a new Odoo project with full configuration."""
     renderer = TemplateRenderer()
 
-    # Validate name
     if not name.replace("_", "").replace("-", "").isalnum():
         raise ProjectError(f"Project name '{name}' is invalid. Use only alphanumeric, underscore, hyphen.")
 
-    # Check for conflicts
     existing = config_manager.get_project(name)
     if existing:
         console.print(f"[yellow]Project '{name}' already exists. Re-generating files.[/yellow]")
 
-    # Resolve database name
     resolved_db = db_name or f"odoo_{name}_{version}"
 
-    # Build config
+    # Tu dong chon port neu khong chi dinh
+    used_ports = _get_used_ports(config_manager)
+    base_port = ODOO_PORTS.get(version, 8069)
+    if port == 0:
+        odoo_port = _find_free_port(base_port, used_ports)
+    else:
+        odoo_port = port
+    longpoll_port = odoo_port + 3
+
+    # Detect enterprise
+    has_enterprise = _detect_enterprise(version)
+    if has_enterprise:
+        console.print(f"[green]✓ Enterprise modules detected for Odoo {version}[/green]")
+    else:
+        console.print(f"[dim]Enterprise not found — using Community only[/dim]")
+
     db_config = DatabaseConfig(
         host="postgres",
         port=5432,
@@ -64,23 +106,28 @@ def run_create_project(
         odoo=odoo_config,
     )
 
-    # Create directories
+    # Tao thu muc
     for subdir in PROJECT_SUBDIRS:
         (project.project_dir / subdir).mkdir(parents=True, exist_ok=True)
 
     config_dir = project.project_dir / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
 
-    # Generate odoo.conf
-    addons_path = project.get_addons_path()
-    # Check if enterprise exists and add it
-    enterprise_dir = WORKSPACE_ROOT / "versions" / str(version) / "enterprise"
-    has_enterprise = any(
-        (enterprise_dir / d / "__manifest__.py").exists()
-        for d in (enterprise_dir.iterdir() if enterprise_dir.exists() else [])
-        if (enterprise_dir / d).is_dir()
-    )
+    # Build addons_path
+    addons_path = []
+    source_dir = WORKSPACE_ROOT / "versions" / str(version) / "source"
+    if source_dir.exists():
+        addons_path.append(f"/opt/odoo/{version}.0/addons")
+        addons_path.append(f"/opt/odoo/{version}.0/odoo/addons")
+    else:
+        addons_path.append(f"/opt/odoo/{version}.0/addons")
 
+    if has_enterprise:
+        addons_path.append("/opt/enterprise")
+
+    addons_path.append("/opt/custom_addons")
+
+    # Generate odoo.conf
     renderer.render_to_file(
         "odoo/odoo.conf.j2",
         config_dir / "odoo.conf",
@@ -95,7 +142,6 @@ def run_create_project(
     )
 
     # Generate .env
-    odoo_port = ODOO_PORTS[version]
     renderer.render_to_file(
         "project/env.j2",
         project.project_dir / ".env",
@@ -106,7 +152,7 @@ def run_create_project(
             "db_password": db_password,
             "db_name": resolved_db,
             "odoo_port": odoo_port,
-            "longpoll_port": odoo_port + 3,  # e.g. 8072 for v19
+            "longpoll_port": longpoll_port,
             "mailpit_http_port": SERVICE_PORTS["mailpit_http"],
             "mailpit_smtp_port": SERVICE_PORTS["mailpit_smtp"],
             "redis_port": SERVICE_PORTS["redis"],
@@ -127,7 +173,7 @@ def run_create_project(
         "db_password": db_password,
         "db_name": resolved_db,
         "odoo_port": odoo_port,
-        "longpoll_port": odoo_port + 3,
+        "longpoll_port": longpoll_port,
         "filestore_dir": str(project.filestore_dir),
         "custom_addons_dir": str(project.custom_addons_dir),
         "config_dir": str(config_dir),
@@ -143,6 +189,8 @@ def run_create_project(
         "pgadmin_email": config_manager.config.pgadmin_email,
         "pgadmin_password": config_manager.config.pgadmin_password,
         "adminer_port": SERVICE_PORTS["adminer"],
+        "has_enterprise": has_enterprise,
+        "enterprise_dir": str(WORKSPACE_ROOT / "versions" / str(version) / "enterprise"),
     }
     renderer.render_to_file(
         "compose/docker-compose.yml.j2",
@@ -151,47 +199,45 @@ def run_create_project(
         overwrite=True,
     )
 
-    # Generate override (only if not exists — user editable)
     renderer.render_to_file(
         "compose/docker-compose.override.yml.j2",
         project.project_dir / "docker-compose.override.yml",
         context={"project_name": name},
-        overwrite=False,  # Don't overwrite user customizations
+        overwrite=False,
     )
 
-    # Create placeholder README
     readme = project.project_dir / "README.md"
     if not readme.exists():
         readme.write_text(
-            f"# Odoo {version} — {name}\n\n"
-            f"Generated by odoo-bootstrap.\n\n"
-            f"## Start\n```\nodoo-bootstrap start {name}\n```\n\n"
-            f"## Stop\n```\nodoo-bootstrap stop {name}\n```\n\n"
-            f"## Logs\n```\nodoo-bootstrap logs {name}\n```\n",
+            f"# Odoo {version} {'Enterprise' if has_enterprise else 'Community'} — {name}\n\n"
+            f"Port: http://localhost:{odoo_port}\n\n"
+            f"```\nodoo-bootstrap start {name}\n```\n",
             encoding="utf-8",
         )
 
-    # Create .gitignore in custom_addons
     gitignore = project.custom_addons_dir / ".gitignore"
     if not gitignore.exists():
-        gitignore.write_text(
-            "__pycache__/\n*.pyc\n*.pyo\n.DS_Store\n",
-            encoding="utf-8",
-        )
+        gitignore.write_text("__pycache__/\n*.pyc\n.DS_Store\n", encoding="utf-8")
 
-    # Save to config
-    config_manager.add_project(project)
+    # Luu port thuc su vao config
+    project_with_port = ProjectConfig(
+        name=name,
+        version=version,
+        db=db_config,
+        odoo=odoo_config,
+    )
+    config_manager.add_project(project_with_port)
 
-    console.print(f"[green bold]✓ Project '{name}' (Odoo {version}) created[/green bold]")
+    # Hien thi ket qua
+    edition = "Enterprise ✓" if has_enterprise else "Community"
+    console.print(f"\n[green bold]✓ Project '{name}' (Odoo {version} {edition}) created[/green bold]")
+    console.print(f"  URL:        [cyan]http://localhost:{odoo_port}[/cyan]")
     console.print(f"  Directory:  [cyan]{project.project_dir}[/cyan]")
     console.print(f"  Database:   [cyan]{resolved_db}[/cyan]")
-    console.print(f"  Odoo port:  [cyan]{odoo_port}[/cyan]")
-    console.print(f"  Config:     [cyan]{config_dir / 'odoo.conf'}[/cyan]")
+    console.print(f"  Addons:     [cyan]{', '.join(addons_path)}[/cyan]")
     console.print()
-    console.print("Commands:")
+    console.print("Chạy:")
     console.print(f"  [cyan]odoo-bootstrap start {name}[/cyan]")
-    console.print(f"  [cyan]odoo-bootstrap logs {name}[/cyan]")
-    console.print(f"  [cyan]odoo-bootstrap backup {name}[/cyan]")
 
 
 def run_remove_project(name: str, config_manager, keep_data: bool = False) -> None:
@@ -204,14 +250,12 @@ def run_remove_project(name: str, config_manager, keep_data: bool = False) -> No
 
     if not keep_data and project.project_dir.exists():
         confirmed = Confirm.ask(
-            f"Delete all data in {project.project_dir}? This cannot be undone!",
+            f"Delete all data in {project.project_dir}?",
             default=False,
         )
         if confirmed:
             shutil.rmtree(project.project_dir)
             console.print(f"[red]Removed {project.project_dir}[/red]")
-        else:
-            console.print("[dim]Data directory kept[/dim]")
 
     config_manager.remove_project(name)
-    console.print(f"[green]✓ Project '{name}' removed from configuration[/green]")
+    console.print(f"[green]✓ Project '{name}' removed[/green]")
