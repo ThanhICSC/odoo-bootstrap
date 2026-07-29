@@ -313,5 +313,47 @@ def cmd_requirements(
     run_requirements(name=name, config_manager=get_config_manager())
 
 
+
+# ── sync-addons ───────────────────────────────────────────────────────────────
+
+@app.command("sync-addons")
+def cmd_sync_addons(
+    source: Optional[str] = typer.Option(
+        None,
+        "--source", "-s",
+        help="Thư mục chứa addon/ZIP. Mặc định: /home/thanh/ownCloud/Z - Other/modules/",
+    ),
+    project: Optional[str] = typer.Option(
+        None,
+        "--project", "-p",
+        help="Chỉ sync vào project cụ thể (mặc định: tất cả project).",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Xem trước, không copy thực tế.",
+    ),
+) -> None:
+    """
+    Tự động scan ZIP/folder addon, phát hiện version Odoo,
+    copy vào đúng custom_addons của project. Trùng tên thì bỏ qua.
+
+    Ví dụ:
+      odoo-bootstrap sync-addons
+      odoo-bootstrap sync-addons --dry-run
+      odoo-bootstrap sync-addons --project kh_enterprise
+      odoo-bootstrap sync-addons --source ~/Downloads/my_modules/
+    """
+    from pathlib import Path as _Path
+    from odoo_bootstrap.commands.cmd_sync_addons import run_sync_addons
+
+    src = _Path(source) if source else None
+    run_sync_addons(
+        config_manager=get_config_manager(),
+        source_dir=src,
+        project_name=project,
+        dry_run=dry_run,
+    )
+
 if __name__ == "__main__":
     app()
