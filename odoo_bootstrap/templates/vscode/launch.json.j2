@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+{% for project_name, odoo_port, version, source_dir, custom_addons_dir, config_dir in projects %}
+    {
+      "name": "Odoo {{ version }} — {{ project_name }}",
+      "type": "python",
+      "request": "launch",
+      "program": "{{ source_dir }}/odoo-bin",
+      "args": [
+        "--config={{ config_dir }}/odoo.conf",
+        "--dev=reload,qweb,xml",
+        "--log-level=debug"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "{{ source_dir }}"
+      },
+      "python": "/usr/bin/python3"
+    }{% if not loop.last %},{% endif %}
+
+{% endfor %}
+  ]
+}

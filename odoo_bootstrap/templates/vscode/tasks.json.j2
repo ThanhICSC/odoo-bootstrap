@@ -1,0 +1,43 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "odoo-bootstrap: status",
+      "type": "shell",
+      "command": "odoo-bootstrap status",
+      "group": "none",
+      "presentation": {"reveal": "always"}
+    },
+    {
+      "label": "odoo-bootstrap: doctor",
+      "type": "shell",
+      "command": "odoo-bootstrap doctor",
+      "group": "none",
+      "presentation": {"reveal": "always"}
+    },
+{% for project_name, version in projects %}
+    {
+      "label": "Start {{ project_name }} (Odoo {{ version }})",
+      "type": "shell",
+      "command": "odoo-bootstrap start {{ project_name }}",
+      "group": "none",
+      "presentation": {"reveal": "always"}
+    },
+    {
+      "label": "Stop {{ project_name }}",
+      "type": "shell",
+      "command": "odoo-bootstrap stop {{ project_name }}",
+      "group": "none",
+      "presentation": {"reveal": "always"}
+    },
+    {
+      "label": "Logs {{ project_name }}",
+      "type": "shell",
+      "command": "odoo-bootstrap logs {{ project_name }}",
+      "group": "none",
+      "presentation": {"reveal": "always"}
+    }{% if not loop.last %},{% endif %}
+
+{% endfor %}
+  ]
+}

@@ -1,0 +1,16 @@
+# ============================================================
+# docker-compose.override.yml — {{ project_name }}
+# This file is yours to edit. It will NOT be overwritten.
+# ============================================================
+
+version: "3.9"
+
+services:
+  odoo:
+    environment:
+      # Uncomment to enable specific features:
+      # ODOO_RC: /etc/odoo/odoo.conf
+      pass: "true"
+    # Uncomment to mount additional addons:
+    # volumes:
+    #   - /path/to/extra_addons:/opt/extra_addons
