@@ -3,12 +3,10 @@ Centralized logging configuration for odoo-bootstrap.
 """
 
 import logging
-import sys
-from pathlib import Path
 
 from rich.logging import RichHandler
 
-from odoo_bootstrap.core.constants import LOG_FORMAT, LOG_DATE_FORMAT, WORKSPACE_ROOT
+from odoo_bootstrap.core.constants import LOG_DATE_FORMAT, LOG_FORMAT, WORKSPACE_ROOT
 
 
 def setup_logging(level: str = "INFO", log_to_file: bool = True) -> logging.Logger:

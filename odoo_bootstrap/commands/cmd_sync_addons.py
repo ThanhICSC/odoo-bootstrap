@@ -1,24 +1,29 @@
 """
 odoo-bootstrap sync-addons: Tự động scan ZIP/folder addon,
-phát hiện version Odoo, copy vào đúng project.
-- Kiểm tra trùng với Odoo core/enterprise → xóa khỏi source
-- Đoán version thông minh qua nhiều phương pháp
+phát hiện version, copy vào đúng project, build test khi có lỗi báo ngay.
+
+Hỗ trợ cấu trúc thư mục:
+  modules/
+  ├── 17/          ← tất cả addon trong này → Odoo 17
+  ├── 18/          ← tất cả addon trong này → Odoo 18
+  ├── 19/          ← tất cả addon trong này → Odoo 19
+  ├── my_addon/    ← tự đoán version
+  └── module.zip   ← giải nén + tự đoán version
 """
 
 from __future__ import annotations
 
-import ast
 import re
 import shutil
-import zipfile
+import subprocess
 import tempfile
+import zipfile
 from pathlib import Path
-from typing import Optional
 
 from rich.console import Console
 from rich.table import Table
 
-from odoo_bootstrap.core.constants import WORKSPACE_ROOT, SUPPORTED_VERSIONS
+from odoo_bootstrap.core.constants import SUPPORTED_VERSIONS, WORKSPACE_ROOT
 from odoo_bootstrap.core.logger import get_logger
 from odoo_bootstrap.utils.addon import parse_manifest
 
@@ -28,7 +33,8 @@ console = Console()
 DEFAULT_MODULES_DIR = Path("/home/thanh/ownCloud/Z - Other/modules")
 
 
-# ── Tìm addon dirs ────────────────────────────────────────────────────────────
+# ── Extract / Find ────────────────────────────────────────────────────────────
+
 
 def _extract_zip_to_temp(zip_path: Path) -> Path:
     tmp = Path(tempfile.mkdtemp(prefix="ob_addon_"))
@@ -37,18 +43,17 @@ def _extract_zip_to_temp(zip_path: Path) -> Path:
     return tmp
 
 
-def _find_addon_dirs(search_dir: Path) -> list[Path]:
-    """Tìm tất cả addon hợp lệ (có __manifest__.py hoặc __openerp__.py) tối đa 3 cấp."""
-    addons = []
-    seen = set()
+def _find_addon_dirs(search_dir: Path, max_depth: int = 3) -> list[Path]:
+    """Tìm tất cả addon hợp lệ trong thư mục, tối đa max_depth cấp."""
+    addons: list[Path] = []
+    seen: set[str] = set()
 
     def _scan(directory: Path, depth: int = 0) -> None:
-        if depth > 3 or not directory.is_dir():
+        if depth > max_depth or not directory.is_dir():
             return
-        has_manifest = (
-            (directory / "__manifest__.py").exists()
-            or (directory / "__openerp__.py").exists()
-        )
+        has_manifest = (directory / "__manifest__.py").exists() or (
+            directory / "__openerp__.py"
+        ).exists()
         has_init = (directory / "__init__.py").exists()
         if has_manifest and has_init:
             if directory.name not in seen:
@@ -63,47 +68,31 @@ def _find_addon_dirs(search_dir: Path) -> list[Path]:
     return addons
 
 
-# ── Kiểm tra trùng với Odoo core ─────────────────────────────────────────────
+# ── Core index ────────────────────────────────────────────────────────────────
 
-def _build_core_addon_index(versions: list[int]) -> dict[str, list[tuple[int, str]]]:
-    """
-    Build index: {addon_name: [(version, 'community'|'enterprise'), ...]}
-    từ tất cả Odoo source đã clone.
-    """
+
+def _build_core_index(versions: list[int]) -> dict[str, list[tuple[int, str]]]:
+    """Build {addon_name: [(version, 'community'|'enterprise')]}."""
     index: dict[str, list[tuple[int, str]]] = {}
-
     for v in versions:
         ver_dir = WORKSPACE_ROOT / "versions" / str(v)
-
-        # Community
-        for source_root in [
-            ver_dir / "source" / "addons",
-            ver_dir / "source" / "odoo" / "addons",
-        ]:
-            if source_root.exists():
-                for item in source_root.iterdir():
+        for src in [ver_dir / "source" / "addons", ver_dir / "source" / "odoo" / "addons"]:
+            if src.exists():
+                for item in src.iterdir():
                     if item.is_dir() and (item / "__manifest__.py").exists():
                         index.setdefault(item.name, []).append((v, "community"))
-
-        # Enterprise
-        ent_dir = ver_dir / "enterprise"
-        if ent_dir.exists():
-            for item in ent_dir.iterdir():
+        ent = ver_dir / "enterprise"
+        if ent.exists():
+            for item in ent.iterdir():
                 if item.is_dir() and (item / "__manifest__.py").exists():
                     index.setdefault(item.name, []).append((v, "enterprise"))
-
     return index
 
 
-def _is_in_core(addon_name: str, core_index: dict) -> list[tuple[int, str]]:
-    """Trả về list [(version, type)] nếu addon có trong Odoo core."""
-    return core_index.get(addon_name, [])
+# ── Version detection ─────────────────────────────────────────────────────────
 
 
-# ── Đoán version thông minh ───────────────────────────────────────────────────
-
-def _guess_version_from_manifest(addon_dir: Path) -> Optional[int]:
-    """Đọc version field trong __manifest__.py."""
+def _from_manifest(addon_dir: Path) -> int | None:
     manifest = parse_manifest(addon_dir)
     if manifest:
         v = manifest.get_odoo_version()
@@ -112,173 +101,160 @@ def _guess_version_from_manifest(addon_dir: Path) -> Optional[int]:
     return None
 
 
-def _guess_version_from_python_syntax(addon_dir: Path) -> Optional[int]:
-    """
-    Phân tích syntax Python trong addon:
-    - Python 3.10+ match/case → Odoo 17+
-    - f-string walrus operator := → Odoo 16+
-    - Kiểm tra các API pattern đặc trưng từng version
-    """
-    py_files = list(addon_dir.rglob("*.py"))[:20]  # Giới hạn 20 file
-
-    has_match_case = False
-    has_walrus = False
-    api_patterns: dict[str, int] = {}
-
-    for py_file in py_files:
+def _from_python_syntax(addon_dir: Path) -> int | None:
+    scores = {17: 0, 18: 0, 19: 0}
+    for py_file in list(addon_dir.rglob("*.py"))[:30]:
         try:
-            source = py_file.read_text(encoding="utf-8", errors="ignore")
-
-            # match/case (Python 3.10+, Odoo 17+)
-            if re.search(r"^\s*match\s+\w+", source, re.MULTILINE):
-                has_match_case = True
-
-            # Walrus operator (Python 3.8+, Odoo 16+)
-            if ":=" in source:
-                has_walrus = True
-
-            # API patterns đặc trưng
-            # Odoo 17+: _inherit as list, new field types
-            if re.search(r"fields\.Json\(", source):
-                api_patterns["17+"] = api_patterns.get("17+", 0) + 1
-            if re.search(r"api\.model_create_multi", source):
-                api_patterns["16+"] = api_patterns.get("16+", 0) + 1
-
-            # Odoo 17 specific
-            if re.search(r"precompute\s*=\s*True", source):
-                api_patterns["17+"] = api_patterns.get("17+", 0) + 1
-
-            # Odoo 18/19: new ORM patterns
-            if re.search(r"@api\.depends_context", source):
-                api_patterns["14+"] = api_patterns.get("14+", 0) + 1
-
-        except Exception:
-            continue
-
-    if has_match_case:
-        return 17  # Minimum 17
-    if api_patterns.get("17+", 0) >= 2:
-        return 17
-
-    return None
-
-
-def _guess_version_from_xml(addon_dir: Path) -> Optional[int]:
-    """
-    Phân tích XML views để đoán version:
-    - Odoo 17+: <chatter/> shorthand, owl components
-    - Odoo 18+: new kanban syntax
-    - Odoo 16-: old chatter <div class="oe_chatter">
-    """
-    xml_files = list(addon_dir.rglob("*.xml"))[:15]
-    scores: dict[int, int] = {17: 0, 18: 0, 19: 0, 16: 0}
-
-    for xml_file in xml_files:
-        try:
-            content = xml_file.read_text(encoding="utf-8", errors="ignore")
-
-            # Odoo 17+: shorthand chatter
-            if "<chatter/>" in content or "<chatter />" in content:
+            src = py_file.read_text(encoding="utf-8", errors="ignore")
+            if re.search(r"^\s*match\s+\w+", src, re.MULTILINE):
+                scores[17] += 3
+            if "fields.Json(" in src:
                 scores[17] += 2
-            # Odoo 17+: owl component syntax
-            if "t-component" in content or "owl" in content.lower():
+            if "precompute=True" in src or "precompute = True" in src:
+                scores[17] += 2
+            if "api.model_create_multi" in src:
                 scores[17] += 1
-            # Odoo 18+: new list view syntax
-            if 'groups_by="' in content:
-                scores[18] += 1
-            # Odoo 16 và cũ hơn: oe_chatter div
-            if 'class="oe_chatter"' in content:
-                scores[16] += 2
-            # Odoo 17+: website_published field mới
-            if "is_published" in content:
-                scores[17] += 1
-
+            # Odoo 18+ patterns
+            if "BaseModel" in src and "model_fields" in src:
+                scores[18] += 2
         except Exception:
             continue
-
-    # Chọn version có score cao nhất
     best = max(scores, key=lambda k: scores[k])
-    if scores[best] > 0:
-        # Map về supported versions
-        if best >= 19:
-            return 19
-        elif best == 18:
-            return 18
-        elif best == 17:
-            return 17
-    return None
+    return best if scores[best] >= 2 else None
 
 
-def _guess_version_from_dependencies(addon_dir: Path) -> Optional[int]:
-    """
-    Đoán version dựa vào depends trong manifest:
-    - Depend vào module chỉ có từ version nào đó
-    """
+def _from_xml_patterns(addon_dir: Path) -> int | None:
+    scores = {17: 0, 18: 0, 19: 0, 16: 0}
+    for xml_file in list(addon_dir.rglob("*.xml"))[:20]:
+        try:
+            src = xml_file.read_text(encoding="utf-8", errors="ignore")
+            if "<chatter/>" in src or "<chatter />" in src:
+                scores[17] += 3
+            if "t-component" in src:
+                scores[17] += 2
+            if 'class="oe_chatter"' in src:
+                scores[16] += 3
+            if "groups_by=" in src:
+                scores[18] += 2
+            if "is_published" in src:
+                scores[17] += 1
+        except Exception:
+            continue
+    # Chỉ xét supported versions
+    relevant = {v: s for v, s in scores.items() if v in SUPPORTED_VERSIONS}
+    if not relevant:
+        return None
+    best = max(relevant, key=lambda k: relevant[k])
+    return best if relevant[best] >= 2 else None
+
+
+def _from_dependencies(addon_dir: Path) -> int | None:
     manifest = parse_manifest(addon_dir)
     if not manifest:
         return None
-
     depends = set(manifest.depends)
-
-    # Module chỉ có từ Odoo 17+
-    v17_only = {"discuss", "spreadsheet", "web_grid"}
-    # Module chỉ có từ Odoo 16+
-    v16_only = {"payment", "website_sale_collect"}
-
-    if depends & v17_only:
+    v17_modules = {"discuss", "spreadsheet", "web_grid", "knowledge", "sign"}
+    if depends & v17_modules:
         return 17
     return None
 
 
-def _guess_version_smart(addon_dir: Path, core_index: dict) -> tuple[Optional[int], str]:
-    """
-    Tổng hợp tất cả phương pháp đoán version.
-    Trả về (version, method_used).
-    """
-    # 1. Manifest version field (chắc chắn nhất)
-    v = _guess_version_from_manifest(addon_dir)
+def _guess_version(
+    addon_dir: Path, core_index: dict, forced_version: int | None = None
+) -> tuple[int | None, str]:
+    """Trả về (version, method)."""
+    if forced_version:
+        return forced_version, "folder-name"
+
+    v = _from_manifest(addon_dir)
     if v:
         return v, "manifest"
 
-    # 2. Tên addon trùng với core của 1 version cụ thể
-    core_matches = _is_in_core(addon_dir.name, core_index)
-    if len(core_matches) == 1:
-        return core_matches[0][0], "core-match"
-    elif len(core_matches) > 1:
-        # Trùng nhiều version — thử phương pháp khác để phân biệt
-        versions_in_core = [v for v, _ in core_matches]
-        # fallthrough to other methods
+    matches = core_index.get(addon_dir.name, [])
+    if len(matches) == 1:
+        return matches[0][0], "core-match"
 
-    # 3. Python syntax
-    v = _guess_version_from_python_syntax(addon_dir)
+    v = _from_python_syntax(addon_dir)
     if v:
         return v, "python-syntax"
 
-    # 4. XML view patterns
-    v = _guess_version_from_xml(addon_dir)
+    v = _from_xml_patterns(addon_dir)
     if v:
         return v, "xml-pattern"
 
-    # 5. Dependencies
-    v = _guess_version_from_dependencies(addon_dir)
+    v = _from_dependencies(addon_dir)
     if v:
         return v, "dependencies"
 
-    # 6. Nếu trùng nhiều version trong core, lấy version mới nhất
-    if core_matches:
-        return max(v for v, _ in core_matches), "core-latest"
+    if matches:
+        return max(mv for mv, _ in matches), "core-latest"
 
     return None, "unknown"
 
 
-# ── Main sync logic ───────────────────────────────────────────────────────────
+# ── Build test ────────────────────────────────────────────────────────────────
+
+
+def _build_test_addon(addon_dir: Path, version: int) -> tuple[bool, str]:
+    """
+    Thử build/validate addon:
+    1. Parse __manifest__.py
+    2. Import tất cả __init__.py bằng Python syntax check
+    3. Validate XML với xmllint nếu có
+    Trả về (passed, error_message).
+    """
+    errors = []
+
+    # 1. Parse manifest
+    manifest_file = addon_dir / "__manifest__.py"
+    if manifest_file.exists():
+        try:
+            import ast
+
+            ast.literal_eval(manifest_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            errors.append(f"__manifest__.py parse error: {e}")
+
+    # 2. Python syntax check tất cả .py files
+    py_files = list(addon_dir.rglob("*.py"))
+    for py_file in py_files:
+        result = subprocess.run(
+            ["python3", "-m", "py_compile", str(py_file)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            rel = py_file.relative_to(addon_dir)
+            errors.append(f"Syntax error {rel}: {result.stderr.strip()}")
+
+    # 3. XML validation
+    xml_files = list(addon_dir.rglob("*.xml"))
+    if shutil.which("xmllint"):
+        for xml_file in xml_files[:10]:  # giới hạn 10 file
+            result = subprocess.run(
+                ["xmllint", "--noout", str(xml_file)],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                rel = xml_file.relative_to(addon_dir)
+                errors.append(f"XML error {rel}: {result.stderr.strip()[:100]}")
+
+    if errors:
+        return False, "\n".join(errors[:3])  # tối đa 3 lỗi đầu
+    return True, ""
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
 
 def run_sync_addons(
     config_manager,
-    source_dir: Optional[Path] = None,
-    project_name: Optional[str] = None,
+    source_dir: Path | None = None,
+    project_name: str | None = None,
     dry_run: bool = False,
     remove_core_duplicates: bool = True,
+    build_test: bool = True,
 ) -> None:
     scan_dir = source_dir or DEFAULT_MODULES_DIR
 
@@ -288,14 +264,14 @@ def run_sync_addons(
 
     console.print(f"\n[bold]Scanning:[/bold] [cyan]{scan_dir}[/cyan]")
     if dry_run:
-        console.print("[yellow]DRY RUN — không thay đổi thực tế[/yellow]\n")
+        console.print("[yellow]DRY RUN — không thay đổi thực tế[/yellow]")
 
     # Build core index
     console.print("[dim]Đang build index Odoo core...[/dim]")
-    core_index = _build_core_addon_index(SUPPORTED_VERSIONS)
+    core_index = _build_core_index(SUPPORTED_VERSIONS)
     console.print(f"[dim]Core index: {len(core_index)} modules[/dim]\n")
 
-    # Target projects
+    # Target map
     if project_name:
         proj = config_manager.get_project(project_name)
         if not proj:
@@ -307,93 +283,142 @@ def run_sync_addons(
         for proj in config_manager.list_projects():
             target_map.setdefault(proj.version, []).append(proj.custom_addons_dir)
 
-    # Scan source items
-    temp_dirs = []
-    # (addon_dir, source_item_path, is_from_zip)
-    all_addon_dirs: list[tuple[Path, Path, bool]] = []
+    if not target_map:
+        console.print("[yellow]Chưa có project nào.[/yellow]")
+        return
+
+    # ── Scan source items ─────────────────────────────────────────────────────
+    temp_dirs: list[Path] = []
+    # (addon_dir, source_item, forced_version)
+    all_addons: list[tuple[Path, Path, int | None]] = []
 
     for item in sorted(scan_dir.iterdir()):
         if item.name.startswith(".") or item.name.startswith("_"):
             continue
 
+        # Folder có tên là version number: 17/ 18/ 19/
+        if item.is_dir() and item.name.isdigit() and int(item.name) in SUPPORTED_VERSIONS:
+            forced_ver = int(item.name)
+            console.print(f"[green]Folder /{item.name}/ → ép version Odoo {forced_ver}[/green]")
+            # Scan addon trực tiếp bên trong
+            for subitem in sorted(item.iterdir()):
+                if subitem.is_file() and subitem.suffix.lower() == ".zip":
+                    try:
+                        tmp = _extract_zip_to_temp(subitem)
+                        temp_dirs.append(tmp)
+                        for a in _find_addon_dirs(tmp):
+                            all_addons.append((a, subitem, forced_ver))
+                    except Exception as e:
+                        console.print(f"[red]Lỗi giải nén {subitem.name}: {e}[/red]")
+                elif subitem.is_dir():
+                    for a in _find_addon_dirs(subitem):
+                        all_addons.append((a, subitem, forced_ver))
+            continue
+
+        # File ZIP bình thường
         if item.is_file() and item.suffix.lower() == ".zip":
             try:
                 tmp = _extract_zip_to_temp(item)
                 temp_dirs.append(tmp)
                 for a in _find_addon_dirs(tmp):
-                    all_addon_dirs.append((a, item, True))
+                    all_addons.append((a, item, None))
             except Exception as e:
                 console.print(f"[red]Lỗi giải nén {item.name}: {e}[/red]")
 
+        # Folder addon thường
         elif item.is_dir():
-            found = _find_addon_dirs(item)
-            if found:
-                for a in found:
-                    all_addon_dirs.append((a, item, False))
+            for a in _find_addon_dirs(item):
+                all_addons.append((a, item, None))
 
-    if not all_addon_dirs:
+    if not all_addons:
         console.print("[yellow]Không tìm thấy addon nào.[/yellow]")
         return
 
-    console.print(f"Tìm thấy [green]{len(all_addon_dirs)}[/green] addon\n")
+    console.print(f"Tìm thấy [bold green]{len(all_addons)}[/bold green] addon\n")
 
-    # Bảng kết quả
+    # ── Xử lý từng addon ─────────────────────────────────────────────────────
     table = Table(show_header=True, header_style="bold cyan", show_lines=False)
-    table.add_column("Addon", style="bold", min_width=25)
-    table.add_column("Version", width=8)
-    table.add_column("Đoán bằng", width=14)
-    table.add_column("Project", width=16)
-    table.add_column("Trạng thái")
+    table.add_column("Addon", style="bold", min_width=22)
+    table.add_column("Ver", width=5)
+    table.add_column("Cách đoán", width=14)
+    table.add_column("Build", width=8)
+    table.add_column("Project", width=14)
+    table.add_column("Kết quả")
 
-    stats = {"copied": 0, "skipped": 0, "duplicate_core": 0, "no_target": 0}
-
-    # Track source items cần xóa (trùng với core)
+    stats = {"copied": 0, "skipped": 0, "core_dup": 0, "no_target": 0, "build_fail": 0}
     items_to_delete: set[Path] = set()
 
-    for addon_dir, source_item, is_from_zip in all_addon_dirs:
+    for addon_dir, source_item, forced_version in all_addons:
         addon_name = addon_dir.name
+        detected_version, method = _guess_version(addon_dir, core_index, forced_version)
 
-        # Đoán version
-        detected_version, method = _guess_version_smart(addon_dir, core_index)
+        # Kiểm tra trùng core (chỉ khi không có forced version)
+        if not forced_version:
+            core_matches = core_index.get(addon_name, [])
+            if core_matches:
+                core_desc = ", ".join(f"v{v} {t}" for v, t in core_matches)
+                table.add_row(
+                    addon_name,
+                    str(detected_version) if detected_version else "?",
+                    method,
+                    "—",
+                    "—",
+                    f"[red]✗ Trùng core ({core_desc})[/red]",
+                )
+                stats["core_dup"] += 1
+                items_to_delete.add(source_item)
+                continue
 
-        # Kiểm tra trùng với Odoo core
-        core_matches = _is_in_core(addon_name, core_index)
-        if core_matches:
-            core_desc = ", ".join(f"v{v} {t}" for v, t in core_matches)
+        # Không có target
+        if not detected_version or detected_version not in target_map:
             table.add_row(
                 addon_name,
                 str(detected_version) if detected_version else "?",
                 method,
                 "—",
-                f"[red]✗ Trùng core ({core_desc})[/red]",
-            )
-            stats["duplicate_core"] += 1
-            # Đánh dấu để xóa source gốc
-            items_to_delete.add(source_item)
-            continue
-
-        # Không có target project cho version này
-        if not detected_version or detected_version not in target_map:
-            ver_str = str(detected_version) if detected_version else "?"
-            table.add_row(
-                addon_name, ver_str, method, "—",
+                "—",
                 "[yellow]⚠ Không có project phù hợp[/yellow]",
             )
             stats["no_target"] += 1
             continue
 
-        # Copy vào từng project target
+        # Build test
+        build_ok = True
+        build_msg = "[green]✓[/green]"
+        if build_test and not dry_run:
+            build_ok, build_error = _build_test_addon(addon_dir, detected_version)
+            if not build_ok:
+                build_msg = "[red]✗ FAIL[/red]"
+                stats["build_fail"] += 1
+                # Hiển thị lỗi rõ ràng
+                table.add_row(
+                    addon_name,
+                    str(detected_version),
+                    method,
+                    build_msg,
+                    "—",
+                    "[red]Build lỗi — bỏ qua[/red]",
+                )
+                # In chi tiết lỗi bên dưới
+                console.print(f"\n  [red bold]BUILD FAIL:[/red bold] {addon_name}")
+                for line in build_error.split("\n"):
+                    if line.strip():
+                        console.print(f"    [red]{line}[/red]")
+                continue
+
+        # Copy
         targets = target_map[detected_version]
         for target_addons_dir in targets:
             dest = target_addons_dir / addon_name
-            proj_name_label = target_addons_dir.parent.name
+            proj_label = target_addons_dir.parent.name
 
             if dest.exists():
                 table.add_row(
                     addon_name,
                     str(detected_version),
                     method,
-                    proj_name_label,
+                    build_msg,
+                    proj_label,
                     "[dim]SKIP (đã có)[/dim]",
                 )
                 stats["skipped"] += 1
@@ -406,7 +431,8 @@ def run_sync_addons(
                     addon_name,
                     str(detected_version),
                     method,
-                    proj_name_label,
+                    build_msg,
+                    proj_label,
                     "[green]✓ Copied[/green]",
                 )
             else:
@@ -414,21 +440,21 @@ def run_sync_addons(
                     addon_name,
                     str(detected_version),
                     method,
-                    proj_name_label,
-                    f"[cyan]→ Sẽ copy vào {proj_name_label}[/cyan]",
+                    "—",
+                    proj_label,
+                    "[cyan]→ Sẽ copy[/cyan]",
                 )
             stats["copied"] += 1
 
-    # Dọn temp dirs
+    # Dọn temp
     for tmp in temp_dirs:
         shutil.rmtree(tmp, ignore_errors=True)
 
-    # Hiển thị bảng
     console.print(table)
 
-    # Xóa file/folder trùng với core
+    # Xóa trùng core
     if items_to_delete and remove_core_duplicates and not dry_run:
-        console.print(f"\n[yellow]Xóa {len(items_to_delete)} item trùng với Odoo core:[/yellow]")
+        console.print(f"\n[yellow]Xóa {len(items_to_delete)} item trùng Odoo core:[/yellow]")
         for item in items_to_delete:
             if item.exists():
                 if item.is_dir():
@@ -437,18 +463,25 @@ def run_sync_addons(
                     item.unlink()
                 console.print(f"  [red]✗ Đã xóa: {item.name}[/red]")
     elif items_to_delete and dry_run:
-        console.print(f"\n[dim]Sẽ xóa {len(items_to_delete)} item trùng core (dry-run)[/dim]")
+        console.print(f"\n[dim]Sẽ xóa {len(items_to_delete)} item trùng core[/dim]")
 
     # Tổng kết
-    console.print(f"""
-[bold]Tổng kết:[/bold]
-  [green]✓ Copied:          {stats['copied']}[/green]
-  [dim]  Bỏ qua (đã có):  {stats['skipped']}[/dim]
-  [red]✗ Trùng core:      {stats['duplicate_core']} (đã xóa khỏi source)[/red]
-  [yellow]⚠ Không có project: {stats['no_target']}[/yellow]
-""")
+    console.print(
+        f"\n[bold]Tổng kết:[/bold]\n"
+        f"  [green]✓ Copied:              {stats['copied']}[/green]\n"
+        f"  [dim]  Skip (đã có):        {stats['skipped']}[/dim]\n"
+        f"  [red]✗ Trùng core (đã xóa): {stats['core_dup']}[/red]\n"
+        f"  [red]✗ Build fail:           {stats['build_fail']}[/red]\n"
+        f"  [yellow]⚠ Không có project:   {stats['no_target']}[/yellow]"
+    )
 
     if stats["copied"] > 0 and not dry_run:
-        console.print("[yellow]Restart project để load addon mới:[/yellow]")
+        console.print("\n[yellow]Restart project để load addon mới:[/yellow]")
         for proj in config_manager.list_projects():
             console.print(f"  odoo-bootstrap restart {proj.name}")
+
+    if stats["build_fail"] > 0:
+        console.print(
+            f"\n[red bold]⚠ {stats['build_fail']} addon bị lỗi build — "
+            "kiểm tra lại trước khi dùng[/red bold]"
+        )

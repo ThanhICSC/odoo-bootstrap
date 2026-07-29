@@ -6,7 +6,6 @@ All commands are registered here via Typer.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -27,7 +26,7 @@ app = typer.Typer(
 console = Console()
 
 # Shared state
-_config_manager: Optional[ConfigManager] = None
+_config_manager: ConfigManager | None = None
 
 
 def get_config_manager() -> ConfigManager:
@@ -67,6 +66,7 @@ def main(
 
 # ── init ─────────────────────────────────────────────────────────────────────
 
+
 @app.command("init")
 def cmd_init(
     workspace: Path = typer.Option(WORKSPACE_ROOT, help="Workspace root directory."),
@@ -98,12 +98,13 @@ def cmd_init(
 
 # ── doctor ───────────────────────────────────────────────────────────────────
 
+
 @app.command("doctor")
 def cmd_doctor() -> None:
     """
     Check system health: Docker, Git, Python, disk, RAM, ports, projects.
     """
-    from odoo_bootstrap.commands.cmd_doctor import run_doctor, print_doctor_report
+    from odoo_bootstrap.commands.cmd_doctor import print_doctor_report, run_doctor
 
     report = run_doctor(get_config_manager())
     print_doctor_report(report)
@@ -112,6 +113,7 @@ def cmd_doctor() -> None:
 
 
 # ── status ───────────────────────────────────────────────────────────────────
+
 
 @app.command("status")
 def cmd_status() -> None:
@@ -122,6 +124,7 @@ def cmd_status() -> None:
 
 
 # ── create-project ────────────────────────────────────────────────────────────
+
 
 @app.command("create-project")
 def cmd_create_project(
@@ -157,6 +160,7 @@ def cmd_create_project(
 
 # ── remove-project ────────────────────────────────────────────────────────────
 
+
 @app.command("remove-project")
 def cmd_remove_project(
     name: str = typer.Argument(..., help="Project name to remove."),
@@ -170,6 +174,7 @@ def cmd_remove_project(
 
 # ── start ─────────────────────────────────────────────────────────────────────
 
+
 @app.command("start")
 def cmd_start(
     name: str = typer.Argument(..., help="Project name to start."),
@@ -181,6 +186,7 @@ def cmd_start(
 
 
 # ── stop ──────────────────────────────────────────────────────────────────────
+
 
 @app.command("stop")
 def cmd_stop(
@@ -194,10 +200,11 @@ def cmd_stop(
 
 # ── restart ───────────────────────────────────────────────────────────────────
 
+
 @app.command("restart")
 def cmd_restart(
     name: str = typer.Argument(..., help="Project name to restart."),
-    service: Optional[str] = typer.Option(None, help="Specific service to restart (e.g. odoo)."),
+    service: str | None = typer.Option(None, help="Specific service to restart (e.g. odoo)."),
 ) -> None:
     """Restart a project or specific service."""
     from odoo_bootstrap.commands.cmd_service import run_restart
@@ -206,6 +213,7 @@ def cmd_restart(
 
 
 # ── logs ──────────────────────────────────────────────────────────────────────
+
 
 @app.command("logs")
 def cmd_logs(
@@ -221,10 +229,11 @@ def cmd_logs(
 
 # ── shell ─────────────────────────────────────────────────────────────────────
 
+
 @app.command("shell")
 def cmd_shell(
     name: str = typer.Argument(..., help="Project name."),
-    db: Optional[str] = typer.Option(None, help="Database name override."),
+    db: str | None = typer.Option(None, help="Database name override."),
 ) -> None:
     """Open an interactive Odoo shell inside the project container."""
     from odoo_bootstrap.commands.cmd_service import run_shell
@@ -234,9 +243,10 @@ def cmd_shell(
 
 # ── rebuild ───────────────────────────────────────────────────────────────────
 
+
 @app.command("rebuild")
 def cmd_rebuild(
-    version: Optional[int] = typer.Argument(None, help="Odoo version to rebuild (default: all)."),
+    version: int | None = typer.Argument(None, help="Odoo version to rebuild (default: all)."),
     no_cache: bool = typer.Option(False, help="Build without Docker cache."),
 ) -> None:
     """Rebuild Docker images for one or all Odoo versions."""
@@ -246,6 +256,7 @@ def cmd_rebuild(
 
 
 # ── clean ─────────────────────────────────────────────────────────────────────
+
 
 @app.command("clean")
 def cmd_clean() -> None:
@@ -257,9 +268,10 @@ def cmd_clean() -> None:
 
 # ── update ────────────────────────────────────────────────────────────────────
 
+
 @app.command("update")
 def cmd_update(
-    version: Optional[int] = typer.Argument(None, help="Odoo version to update (default: all)."),
+    version: int | None = typer.Argument(None, help="Odoo version to update (default: all)."),
 ) -> None:
     """Git pull all Odoo sources and rebuild Docker images if needed."""
     from odoo_bootstrap.commands.cmd_service import run_update
@@ -268,6 +280,7 @@ def cmd_update(
 
 
 # ── backup ────────────────────────────────────────────────────────────────────
+
 
 @app.command("backup")
 def cmd_backup(
@@ -284,11 +297,14 @@ def cmd_backup(
 
 # ── restore ───────────────────────────────────────────────────────────────────
 
+
 @app.command("restore")
 def cmd_restore(
     name: str = typer.Argument(..., help="Project name to restore into."),
     archive: Path = typer.Argument(..., help="Path to the .tar.gz backup archive."),
-    drop_existing: bool = typer.Option(False, help="Drop and recreate the database before restore."),
+    drop_existing: bool = typer.Option(
+        False, help="Drop and recreate the database before restore."
+    ),
 ) -> None:
     """Restore a project from a backup archive."""
     from odoo_bootstrap.commands.cmd_backup import run_restore
@@ -303,9 +319,10 @@ def cmd_restore(
 
 # ── requirements ──────────────────────────────────────────────────────────────
 
+
 @app.command("requirements")
 def cmd_requirements(
-    name: Optional[str] = typer.Argument(None, help="Project name (default: all projects)."),
+    name: str | None = typer.Argument(None, help="Project name (default: all projects)."),
 ) -> None:
     """Install Python packages from custom_addons/requirements.txt inside containers."""
     from odoo_bootstrap.commands.cmd_service import run_requirements
@@ -313,19 +330,21 @@ def cmd_requirements(
     run_requirements(name=name, config_manager=get_config_manager())
 
 
-
 # ── sync-addons ───────────────────────────────────────────────────────────────
+
 
 @app.command("sync-addons")
 def cmd_sync_addons(
-    source: Optional[str] = typer.Option(
+    source: str | None = typer.Option(
         None,
-        "--source", "-s",
+        "--source",
+        "-s",
         help="Thư mục chứa addon/ZIP. Mặc định: /home/thanh/ownCloud/Z - Other/modules/",
     ),
-    project: Optional[str] = typer.Option(
+    project: str | None = typer.Option(
         None,
-        "--project", "-p",
+        "--project",
+        "-p",
         help="Chỉ sync vào project cụ thể (mặc định: tất cả project).",
     ),
     dry_run: bool = typer.Option(
@@ -357,6 +376,7 @@ def cmd_sync_addons(
       odoo-bootstrap sync-addons --keep-duplicates
     """
     from pathlib import Path as _Path
+
     from odoo_bootstrap.commands.cmd_sync_addons import run_sync_addons
 
     src = _Path(source) if source else None
@@ -367,6 +387,7 @@ def cmd_sync_addons(
         dry_run=dry_run,
         remove_core_duplicates=not keep_duplicates,
     )
+
 
 if __name__ == "__main__":
     app()

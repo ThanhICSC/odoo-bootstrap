@@ -2,16 +2,14 @@
 
 from pathlib import Path
 
-import pytest
-
 from odoo_bootstrap.utils.system import (
     check_command_exists,
-    get_disk_free_gb,
-    get_total_ram_gb,
-    get_cpu_count,
-    is_port_in_use,
-    get_python_version,
     ensure_directory,
+    get_cpu_count,
+    get_disk_free_gb,
+    get_python_version,
+    get_total_ram_gb,
+    is_port_in_use,
 )
 
 

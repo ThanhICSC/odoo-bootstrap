@@ -5,12 +5,12 @@ odoo-bootstrap status: Show system and project status.
 from __future__ import annotations
 
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
+from rich.table import Table
 
 from odoo_bootstrap.core.constants import ODOO_PORTS, SERVICE_PORTS, WORKSPACE_ROOT
 from odoo_bootstrap.core.logger import get_logger
-from odoo_bootstrap.utils.system import get_disk_free_gb, get_total_ram_gb, get_cpu_count
+from odoo_bootstrap.utils.system import get_cpu_count, get_disk_free_gb, get_total_ram_gb
 
 logger = get_logger("status")
 console = Console()
@@ -25,7 +25,9 @@ def run_status(config_manager) -> None:
 
 
 def _print_workspace_status() -> None:
-    disk_gb = get_disk_free_gb(WORKSPACE_ROOT if WORKSPACE_ROOT.exists() else __import__("pathlib").Path.home())
+    disk_gb = get_disk_free_gb(
+        WORKSPACE_ROOT if WORKSPACE_ROOT.exists() else __import__("pathlib").Path.home()
+    )
     ram_gb = get_total_ram_gb()
     cpus = get_cpu_count()
 
@@ -42,6 +44,7 @@ def _print_workspace_status() -> None:
 def _print_container_status() -> None:
     try:
         from odoo_bootstrap.docker.docker_service import DockerService
+
         ds = DockerService()
         containers = ds.list_containers(all=True)
 
@@ -105,12 +108,14 @@ def _print_port_status() -> None:
     table.add_column("Status")
 
     all_ports: dict[str, int] = {f"Odoo {v}": p for v, p in ODOO_PORTS.items()}
-    all_ports.update({
-        "PgAdmin": SERVICE_PORTS["pgadmin"],
-        "Mailpit HTTP": SERVICE_PORTS["mailpit_http"],
-        "Mailpit SMTP": SERVICE_PORTS["mailpit_smtp"],
-        "Redis": SERVICE_PORTS["redis"],
-    })
+    all_ports.update(
+        {
+            "PgAdmin": SERVICE_PORTS["pgadmin"],
+            "Mailpit HTTP": SERVICE_PORTS["mailpit_http"],
+            "Mailpit SMTP": SERVICE_PORTS["mailpit_smtp"],
+            "Redis": SERVICE_PORTS["redis"],
+        }
+    )
 
     for service, port in all_ports.items():
         in_use = is_port_in_use(port)

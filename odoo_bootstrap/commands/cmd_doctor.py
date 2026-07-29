@@ -4,16 +4,15 @@ odoo-bootstrap doctor: Comprehensive system health checker.
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from rich.console import Console
 from rich.table import Table
 
 from odoo_bootstrap.core.constants import (
-    SUPPORTED_VERSIONS,
     ODOO_PORTS,
     SERVICE_PORTS,
+    SUPPORTED_VERSIONS,
     WORKSPACE_ROOT,
 )
 from odoo_bootstrap.core.logger import get_logger
@@ -21,11 +20,11 @@ from odoo_bootstrap.core.models import DoctorCheck, DoctorReport
 from odoo_bootstrap.utils.system import (
     check_command_exists,
     get_command_version,
-    get_disk_free_gb,
-    get_total_ram_gb,
     get_cpu_count,
-    is_port_in_use,
+    get_disk_free_gb,
     get_python_version,
+    get_total_ram_gb,
+    is_port_in_use,
 )
 
 logger = get_logger("doctor")
@@ -92,10 +91,13 @@ def _check_docker(report: DoctorReport) -> None:
 
 def _check_docker_compose(report: DoctorReport) -> None:
     import subprocess
+
     try:
         result = subprocess.run(
             ["docker", "compose", "version", "--short"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
             _ok(report, "Docker Compose", f"Docker Compose v{result.stdout.strip()}")
@@ -142,12 +144,14 @@ def _check_cpu(report: DoctorReport) -> None:
 
 def _check_ports(report: DoctorReport) -> None:
     all_ports: dict[str, int] = {f"Odoo {v}": p for v, p in ODOO_PORTS.items()}
-    all_ports.update({
-        "PgAdmin": SERVICE_PORTS["pgadmin"],
-        "Mailpit HTTP": SERVICE_PORTS["mailpit_http"],
-        "Mailpit SMTP": SERVICE_PORTS["mailpit_smtp"],
-        "Redis": SERVICE_PORTS["redis"],
-    })
+    all_ports.update(
+        {
+            "PgAdmin": SERVICE_PORTS["pgadmin"],
+            "Mailpit HTTP": SERVICE_PORTS["mailpit_http"],
+            "Mailpit SMTP": SERVICE_PORTS["mailpit_smtp"],
+            "Redis": SERVICE_PORTS["redis"],
+        }
+    )
     occupied = []
     for name, port in all_ports.items():
         if is_port_in_use(port):
@@ -169,6 +173,7 @@ def _check_workspace(report: DoctorReport) -> None:
 def _check_docker_daemon(report: DoctorReport) -> None:
     try:
         from odoo_bootstrap.docker.docker_service import DockerService
+
         ds = DockerService()
         ver = ds.get_docker_version()
         _ok(report, "Docker daemon", f"Docker daemon responding (v{ver})")
@@ -178,14 +183,20 @@ def _check_docker_daemon(report: DoctorReport) -> None:
 
 def _check_postgres_reachable(report: DoctorReport) -> None:
     from odoo_bootstrap.utils.database import postgres_is_reachable
+
     if postgres_is_reachable():
         _ok(report, "PostgreSQL", "PostgreSQL reachable on localhost:5432")
     else:
-        _warn(report, "PostgreSQL", "PostgreSQL not reachable on localhost:5432 (shared services may not be running)")
+        _warn(
+            report,
+            "PostgreSQL",
+            "PostgreSQL not reachable on localhost:5432 (shared services may not be running)",
+        )
 
 
 def _check_python_packages(report: DoctorReport) -> None:
     import importlib.util
+
     required = [
         ("typer", "typer"),
         ("rich", "rich"),
@@ -220,6 +231,7 @@ def _check_projects(report: DoctorReport, config_manager) -> None:
 def _check_docker_images(report: DoctorReport) -> None:
     try:
         from odoo_bootstrap.docker.docker_service import DockerService
+
         ds = DockerService()
         for v in SUPPORTED_VERSIONS:
             image = f"bizapps-odoo:{v}"
@@ -233,7 +245,9 @@ def _check_docker_images(report: DoctorReport) -> None:
 
 def print_doctor_report(report: DoctorReport) -> None:
     """Print the doctor report as a Rich table."""
-    table = Table(title="[bold]odoo-bootstrap doctor[/bold]", show_header=True, header_style="bold cyan")
+    table = Table(
+        title="[bold]odoo-bootstrap doctor[/bold]", show_header=True, header_style="bold cyan"
+    )
     table.add_column("Check", style="bold", width=28)
     table.add_column("Status", width=10)
     table.add_column("Message")

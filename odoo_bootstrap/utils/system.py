@@ -8,7 +8,6 @@ import shutil
 import socket
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 
 def check_command_exists(command: str) -> bool:
@@ -16,7 +15,7 @@ def check_command_exists(command: str) -> bool:
     return shutil.which(command) is not None
 
 
-def get_command_version(command: str, version_flag: str = "--version") -> Optional[str]:
+def get_command_version(command: str, version_flag: str = "--version") -> str | None:
     """Return version string for a CLI tool, or None if not found."""
     try:
         result = subprocess.run(
@@ -34,7 +33,7 @@ def get_disk_free_gb(path: Path) -> float:
     """Return free disk space in GB for the given path."""
     try:
         stat = shutil.disk_usage(str(path))
-        return round(stat.free / (1024 ** 3), 2)
+        return round(stat.free / (1024**3), 2)
     except Exception:
         return 0.0
 
@@ -46,7 +45,7 @@ def get_total_ram_gb() -> float:
             for line in f:
                 if line.startswith("MemTotal:"):
                     kb = int(line.split()[1])
-                    return round(kb / (1024 ** 2), 2)
+                    return round(kb / (1024**2), 2)
     except Exception:
         pass
     return 0.0
@@ -55,6 +54,7 @@ def get_total_ram_gb() -> float:
 def get_cpu_count() -> int:
     """Return number of CPU cores."""
     import os
+
     return os.cpu_count() or 1
 
 
@@ -65,19 +65,20 @@ def is_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
         try:
             s.connect((host, port))
             return True
-        except (ConnectionRefusedError, socket.timeout, OSError):
+        except (TimeoutError, ConnectionRefusedError, OSError):
             return False
 
 
 def get_python_version() -> str:
     """Return the current Python version string."""
     import sys
+
     return f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
 
 
 def run_command(
     cmd: list[str],
-    cwd: Optional[Path] = None,
+    cwd: Path | None = None,
     capture: bool = True,
     timeout: int = 300,
 ) -> tuple[int, str, str]:
@@ -98,9 +99,9 @@ def ensure_directory(path: Path, mode: int = 0o755) -> None:
     path.chmod(mode)
 
 
-def get_git_version() -> Optional[str]:
+def get_git_version() -> str | None:
     return get_command_version("git")
 
 
-def get_docker_version_str() -> Optional[str]:
+def get_docker_version_str() -> str | None:
     return get_command_version("docker")

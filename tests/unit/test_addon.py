@@ -2,14 +2,11 @@
 
 from pathlib import Path
 
-import pytest
-
 from odoo_bootstrap.utils.addon import (
-    parse_manifest,
-    find_addons,
     check_addons_compatibility,
     collect_python_dependencies,
-    AddonManifest,
+    find_addons,
+    parse_manifest,
 )
 
 

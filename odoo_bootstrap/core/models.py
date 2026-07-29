@@ -6,11 +6,14 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from odoo_bootstrap.core.constants import SUPPORTED_VERSIONS, ODOO_PORTS, SERVICE_PORTS, WORKSPACE_ROOT
+from odoo_bootstrap.core.constants import (
+    ODOO_PORTS,
+    SUPPORTED_VERSIONS,
+    WORKSPACE_ROOT,
+)
 
 
 class OdooVersion(int, Enum):
@@ -137,7 +140,7 @@ class DoctorCheck(BaseModel):
     name: str
     status: str  # "ok" | "warning" | "error" | "skip"
     message: str
-    detail: Optional[str] = None
+    detail: str | None = None
 
 
 class DoctorReport(BaseModel):
@@ -157,4 +160,4 @@ class ContainerStatus(BaseModel):
     status: str
     image: str
     ports: str
-    project: Optional[str] = None
+    project: str | None = None

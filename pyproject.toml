@@ -65,7 +65,10 @@ target-version = ["py312"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP"]
+ignore = ["UP036", "UP032", "N806", "N803", "E501"]
 
 [tool.isort]
 profile = "black"

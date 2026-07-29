@@ -1,6 +1,5 @@
 """Integration tests for the CLI using Typer's test runner."""
 
-import pytest
 from typer.testing import CliRunner
 
 from odoo_bootstrap.main import app

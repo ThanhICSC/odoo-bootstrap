@@ -1,7 +1,5 @@
 """Unit tests for TemplateRenderer."""
 
-from pathlib import Path
-
 import pytest
 
 from odoo_bootstrap.config.template_renderer import TemplateRenderer

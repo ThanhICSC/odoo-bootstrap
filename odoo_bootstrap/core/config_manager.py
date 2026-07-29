@@ -4,14 +4,14 @@ Configuration manager: load, save, and validate bootstrap.yaml.
 
 from __future__ import annotations
 
-import yaml
 from pathlib import Path
-from typing import Optional
 
-from odoo_bootstrap.core.constants import WORKSPACE_ROOT, BOOTSTRAP_CONFIG_FILE
+import yaml
+
+from odoo_bootstrap.core.constants import BOOTSTRAP_CONFIG_FILE, WORKSPACE_ROOT
 from odoo_bootstrap.core.exceptions import ConfigurationError
 from odoo_bootstrap.core.logger import get_logger
-from odoo_bootstrap.core.models import BootstrapConfig, ProjectConfig, DatabaseConfig, OdooConfig
+from odoo_bootstrap.core.models import BootstrapConfig, DatabaseConfig, OdooConfig, ProjectConfig
 
 logger = get_logger("config_manager")
 
@@ -21,9 +21,9 @@ DEFAULT_CONFIG_PATH = WORKSPACE_ROOT / BOOTSTRAP_CONFIG_FILE
 class ConfigManager:
     """Manages bootstrap.yaml lifecycle."""
 
-    def __init__(self, config_path: Optional[Path] = None) -> None:
+    def __init__(self, config_path: Path | None = None) -> None:
         self.config_path = config_path or DEFAULT_CONFIG_PATH
-        self._config: Optional[BootstrapConfig] = None
+        self._config: BootstrapConfig | None = None
 
     @property
     def config(self) -> BootstrapConfig:
@@ -59,7 +59,7 @@ class ConfigManager:
         except Exception as e:
             raise ConfigurationError(f"Failed to load config from {self.config_path}: {e}") from e
 
-    def save(self, config: Optional[BootstrapConfig] = None) -> None:
+    def save(self, config: BootstrapConfig | None = None) -> None:
         """Save config to YAML file."""
         cfg = config or self._config
         if cfg is None:
@@ -119,7 +119,7 @@ class ConfigManager:
             del self.config.projects[name]
             self.save()
 
-    def get_project(self, name: str) -> Optional[ProjectConfig]:
+    def get_project(self, name: str) -> ProjectConfig | None:
         """Get a project config by name."""
         return self.config.projects.get(name)
 

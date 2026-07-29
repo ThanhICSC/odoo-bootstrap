@@ -1,13 +1,9 @@
 """Unit tests for ConfigManager."""
 
-import tempfile
-from pathlib import Path
-
 import pytest
-import yaml
 
 from odoo_bootstrap.core.config_manager import ConfigManager
-from odoo_bootstrap.core.models import BootstrapConfig, ProjectConfig, DatabaseConfig
+from odoo_bootstrap.core.models import BootstrapConfig, DatabaseConfig, ProjectConfig
 
 
 @pytest.fixture

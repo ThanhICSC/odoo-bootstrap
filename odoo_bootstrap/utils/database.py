@@ -5,7 +5,6 @@ PostgreSQL database utilities.
 from __future__ import annotations
 
 import subprocess
-from typing import Optional
 
 from odoo_bootstrap.core.exceptions import DatabaseError
 from odoo_bootstrap.core.logger import get_logger
@@ -18,6 +17,7 @@ def get_psql_connection(config: DatabaseConfig):
     """Return a psycopg2 connection to the given database config."""
     try:
         import psycopg2
+
         return psycopg2.connect(
             host=config.host,
             port=config.port,
@@ -34,8 +34,10 @@ def database_exists(config: DatabaseConfig) -> bool:
     """Return True if the database exists."""
     try:
         pg_config = DatabaseConfig(
-            host=config.host, port=config.port,
-            user=config.user, password=config.password,
+            host=config.host,
+            port=config.port,
+            user=config.user,
+            password=config.password,
             name="postgres",
         )
         conn = get_psql_connection(pg_config)
@@ -59,8 +61,10 @@ def create_database(config: DatabaseConfig) -> None:
         return
     try:
         pg_config = DatabaseConfig(
-            host=config.host, port=config.port,
-            user=config.user, password=config.password,
+            host=config.host,
+            port=config.port,
+            user=config.user,
+            password=config.password,
             name="postgres",
         )
         conn = get_psql_connection(pg_config)
@@ -84,8 +88,10 @@ def drop_database(config: DatabaseConfig) -> None:
         return
     try:
         pg_config = DatabaseConfig(
-            host=config.host, port=config.port,
-            user=config.user, password=config.password,
+            host=config.host,
+            port=config.port,
+            user=config.user,
+            password=config.password,
             name="postgres",
         )
         conn = get_psql_connection(pg_config)
@@ -158,7 +164,9 @@ def pg_restore(
     logger.info(f"Database {config.name} restored from {input_file}")
 
 
-def postgres_is_reachable(host: str = "localhost", port: int = 5432, user: str = "odoo", password: str = "odoo") -> bool:
+def postgres_is_reachable(
+    host: str = "localhost", port: int = 5432, user: str = "odoo", password: str = "odoo"
+) -> bool:
     """Quick check if PostgreSQL is reachable."""
     try:
         config = DatabaseConfig(host=host, port=port, user=user, password=password, name="postgres")

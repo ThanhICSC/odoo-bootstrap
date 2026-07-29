@@ -5,14 +5,11 @@ Service management commands: start, stop, restart, logs, shell, rebuild, clean, 
 from __future__ import annotations
 
 import subprocess
-import sys
-from pathlib import Path
-from typing import Optional
 
 from rich.console import Console
 
-from odoo_bootstrap.core.constants import WORKSPACE_ROOT, SUPPORTED_VERSIONS
-from odoo_bootstrap.core.exceptions import ProjectError, DockerError
+from odoo_bootstrap.core.constants import SUPPORTED_VERSIONS, WORKSPACE_ROOT
+from odoo_bootstrap.core.exceptions import DockerError, ProjectError
 from odoo_bootstrap.core.logger import get_logger
 from odoo_bootstrap.docker.docker_service import DockerService
 
@@ -24,7 +21,9 @@ def run_start(name: str, config_manager) -> None:
     """Start a project using docker compose."""
     project = config_manager.get_project(name)
     if not project:
-        raise ProjectError(f"Project '{name}' not found. Run: odoo-bootstrap create-project {name} --version 19")
+        raise ProjectError(
+            f"Project '{name}' not found. Run: odoo-bootstrap create-project {name} --version 19"
+        )
 
     if not project.project_dir.exists():
         raise ProjectError(f"Project directory missing: {project.project_dir}")
@@ -51,7 +50,7 @@ def run_stop(name: str, config_manager) -> None:
     console.print(f"[green]✓ Project '{name}' stopped[/green]")
 
 
-def run_restart(name: str, config_manager, service: Optional[str] = None) -> None:
+def run_restart(name: str, config_manager, service: str | None = None) -> None:
     """Restart a project or specific service."""
     project = config_manager.get_project(name)
     if not project:
@@ -71,11 +70,15 @@ def run_logs(name: str, config_manager, follow: bool = False, tail: int = 100) -
 
     compose_file = project.project_dir / "docker-compose.yml"
     cmd = [
-        "docker", "compose",
-        "-p", name,
-        "-f", str(compose_file),
+        "docker",
+        "compose",
+        "-p",
+        name,
+        "-f",
+        str(compose_file),
         "logs",
-        "--tail", str(tail),
+        "--tail",
+        str(tail),
     ]
     if follow:
         cmd.append("-f")
@@ -89,7 +92,7 @@ def run_logs(name: str, config_manager, follow: bool = False, tail: int = 100) -
         raise DockerError(f"Logs command failed: {e}") from e
 
 
-def run_shell(name: str, config_manager, db: Optional[str] = None) -> None:
+def run_shell(name: str, config_manager, db: str | None = None) -> None:
     """Open an Odoo shell inside the running container."""
     project = config_manager.get_project(name)
     if not project:
@@ -99,8 +102,12 @@ def run_shell(name: str, config_manager, db: Optional[str] = None) -> None:
     db_name = db or project.db.name
 
     cmd = [
-        "docker", "exec", "-it", container_name,
-        "python", f"/opt/odoo/{project.version}.0/odoo-bin",
+        "docker",
+        "exec",
+        "-it",
+        container_name,
+        "python",
+        f"/opt/odoo/{project.version}.0/odoo-bin",
         "shell",
         "--config=/etc/odoo/odoo.conf",
         f"--database={db_name}",
@@ -112,7 +119,7 @@ def run_shell(name: str, config_manager, db: Optional[str] = None) -> None:
         raise DockerError(f"Shell command failed. Is the container running? ({e})") from e
 
 
-def run_rebuild(version: Optional[int], config_manager, no_cache: bool = False) -> None:
+def run_rebuild(version: int | None, config_manager, no_cache: bool = False) -> None:
     """Rebuild Docker images for one or all versions."""
     docker = DockerService()
     versions = [version] if version else SUPPORTED_VERSIONS
@@ -133,7 +140,7 @@ def run_rebuild(version: Optional[int], config_manager, no_cache: bool = False) 
 
 def run_clean(config_manager) -> None:
     """Remove stopped containers and dangling images."""
-    docker = DockerService()
+    DockerService()  # validate daemon is running
 
     console.print("[cyan]Pruning stopped containers...[/cyan]")
     subprocess.run(["docker", "container", "prune", "-f"], check=False)
@@ -144,7 +151,7 @@ def run_clean(config_manager) -> None:
     console.print("[green]✓ Clean complete[/green]")
 
 
-def run_update(version: Optional[int], config_manager) -> None:
+def run_update(version: int | None, config_manager) -> None:
     """Git pull Odoo sources and rebuild images if needed."""
     from odoo_bootstrap.utils.git import clone_or_pull, is_git_repo
 
@@ -153,7 +160,9 @@ def run_update(version: Optional[int], config_manager) -> None:
     for v in versions:
         source_dir = WORKSPACE_ROOT / "versions" / str(v) / "source"
         if not is_git_repo(source_dir):
-            console.print(f"[yellow]Odoo {v} source not cloned yet, run: odoo-bootstrap init[/yellow]")
+            console.print(
+                f"[yellow]Odoo {v} source not cloned yet, run: odoo-bootstrap init[/yellow]"
+            )
             continue
 
         console.print(f"[cyan]Updating Odoo {v}...[/cyan]")
@@ -170,13 +179,11 @@ def run_update(version: Optional[int], config_manager) -> None:
             run_rebuild(v, config_manager)
 
 
-def run_requirements(name: Optional[str], config_manager) -> None:
+def run_requirements(name: str | None, config_manager) -> None:
     """Install Python requirements from custom_addons into running container(s)."""
     docker = DockerService()
 
-    projects = (
-        [config_manager.get_project(name)] if name else config_manager.list_projects()
-    )
+    projects = [config_manager.get_project(name)] if name else config_manager.list_projects()
 
     for project in projects:
         if not project:

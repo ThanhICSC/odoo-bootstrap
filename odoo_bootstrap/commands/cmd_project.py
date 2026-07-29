@@ -5,7 +5,6 @@ odoo-bootstrap create-project / remove-project commands.
 from __future__ import annotations
 
 import shutil
-from pathlib import Path
 
 from rich.console import Console
 from rich.prompt import Confirm
@@ -13,8 +12,8 @@ from rich.prompt import Confirm
 from odoo_bootstrap.config.template_renderer import TemplateRenderer
 from odoo_bootstrap.core.constants import (
     ODOO_PORTS,
-    SERVICE_PORTS,
     PROJECT_SUBDIRS,
+    SERVICE_PORTS,
     WORKSPACE_ROOT,
 )
 from odoo_bootstrap.core.exceptions import ProjectError
@@ -61,7 +60,7 @@ def run_create_project(
     db_user: str = "odoo",
     db_password: str = "odoo",
     port: int = 0,
-    edition: str = "auto",   # "enterprise" | "community" | "auto"
+    edition: str = "auto",  # "enterprise" | "community" | "auto"
 ) -> None:
     """Create a new Odoo project with full configuration."""
     renderer = TemplateRenderer()
@@ -193,9 +192,7 @@ def run_create_project(
             "pgadmin_password": config_manager.config.pgadmin_password,
             "adminer_port": SERVICE_PORTS["adminer"],
             "has_enterprise": use_enterprise,
-            "enterprise_dir": str(
-                WORKSPACE_ROOT / "versions" / str(version) / "enterprise"
-            ),
+            "enterprise_dir": str(WORKSPACE_ROOT / "versions" / str(version) / "enterprise"),
         },
         overwrite=True,
     )
@@ -224,7 +221,9 @@ def run_create_project(
 
     config_manager.add_project(project)
 
-    console.print(f"\n[green bold]✓ Project '{name}' (Odoo {version} {edition_label}) tạo xong[/green bold]")
+    console.print(
+        f"\n[green bold]✓ Project '{name}' (Odoo {version} {edition_label}) tạo xong[/green bold]"
+    )
     console.print(f"  URL:       [cyan]http://localhost:{odoo_port}[/cyan]")
     console.print(f"  Database:  [cyan]{resolved_db}[/cyan]")
     console.print(f"  Directory: [cyan]{project.project_dir}[/cyan]")

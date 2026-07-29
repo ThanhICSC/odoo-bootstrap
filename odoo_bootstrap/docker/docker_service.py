@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 import docker
 from docker.errors import DockerException, ImageNotFound, NotFound
@@ -45,7 +44,7 @@ class DockerService:
         self,
         dockerfile_path: Path,
         image_name: str,
-        build_args: Optional[dict[str, str]] = None,
+        build_args: dict[str, str] | None = None,
         no_cache: bool = False,
     ) -> None:
         """Build a Docker image from a Dockerfile."""
@@ -78,7 +77,7 @@ class DockerService:
 
     # ── Container operations ──────────────────────────────────────────────────
 
-    def get_container(self, name: str) -> Optional[Container]:
+    def get_container(self, name: str) -> Container | None:
         try:
             return self.client.containers.get(name)
         except NotFound:
@@ -120,7 +119,9 @@ class DockerService:
             return f"Container {name} not found"
         return container.logs(tail=tail, timestamps=True).decode("utf-8", errors="replace")
 
-    def exec_in_container(self, name: str, command: list[str], user: str = "root") -> tuple[int, str]:
+    def exec_in_container(
+        self, name: str, command: list[str], user: str = "root"
+    ) -> tuple[int, str]:
         """Execute a command inside a running container."""
         container = self.get_container(name)
         if not container or container.status != "running":
@@ -134,10 +135,7 @@ class DockerService:
         result = []
         for c in containers:
             ports_str = ", ".join(
-                f"{h['HostPort']}->{k}"
-                for k, v in (c.ports or {}).items()
-                if v
-                for h in v
+                f"{h['HostPort']}->{k}" for k, v in (c.ports or {}).items() if v for h in v
             )
             result.append(
                 ContainerStatus(
@@ -154,9 +152,12 @@ class DockerService:
     def compose_up(self, compose_dir: Path, project_name: str, detach: bool = True) -> None:
         """Run docker compose up."""
         cmd = [
-            "docker", "compose",
-            "-p", project_name,
-            "-f", str(compose_dir / "docker-compose.yml"),
+            "docker",
+            "compose",
+            "-p",
+            project_name,
+            "-f",
+            str(compose_dir / "docker-compose.yml"),
         ]
         override = compose_dir / "docker-compose.override.yml"
         if override.exists():
@@ -170,31 +171,41 @@ class DockerService:
     def compose_down(self, compose_dir: Path, project_name: str, volumes: bool = False) -> None:
         """Run docker compose down."""
         cmd = [
-            "docker", "compose",
-            "-p", project_name,
-            "-f", str(compose_dir / "docker-compose.yml"),
+            "docker",
+            "compose",
+            "-p",
+            project_name,
+            "-f",
+            str(compose_dir / "docker-compose.yml"),
             "down",
         ]
         if volumes:
             cmd.append("-v")
         self._run_subprocess(cmd, cwd=compose_dir)
 
-    def compose_restart(self, compose_dir: Path, project_name: str, service: Optional[str] = None) -> None:
+    def compose_restart(
+        self, compose_dir: Path, project_name: str, service: str | None = None
+    ) -> None:
         cmd = [
-            "docker", "compose",
-            "-p", project_name,
-            "-f", str(compose_dir / "docker-compose.yml"),
+            "docker",
+            "compose",
+            "-p",
+            project_name,
+            "-f",
+            str(compose_dir / "docker-compose.yml"),
             "restart",
         ]
         if service:
             cmd.append(service)
         self._run_subprocess(cmd, cwd=compose_dir)
 
-    def _run_subprocess(self, cmd: list[str], cwd: Optional[Path] = None) -> None:
+    def _run_subprocess(self, cmd: list[str], cwd: Path | None = None) -> None:
         try:
             subprocess.run(cmd, cwd=cwd, check=True)
         except subprocess.CalledProcessError as e:
-            raise DockerError(f"Docker command failed: {' '.join(cmd)}\nReturn code: {e.returncode}") from e
+            raise DockerError(
+                f"Docker command failed: {' '.join(cmd)}\nReturn code: {e.returncode}"
+            ) from e
 
     # ── Network / Volume ──────────────────────────────────────────────────────
 
@@ -220,7 +231,9 @@ class DockerService:
         try:
             result = subprocess.run(
                 ["docker", "compose", "version", "--short"],
-                capture_output=True, text=True, check=True,
+                capture_output=True,
+                text=True,
+                check=True,
             )
             return result.stdout.strip()
         except Exception:

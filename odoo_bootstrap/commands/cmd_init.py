@@ -6,19 +6,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from odoo_bootstrap.config.template_renderer import TemplateRenderer
 from odoo_bootstrap.core.config_manager import ConfigManager
 from odoo_bootstrap.core.constants import (
-    SUPPORTED_VERSIONS,
-    SERVICE_PORTS,
-    WORKSPACE_DIRS,
-    VERSION_SUBDIRS,
     ODOO_COMMUNITY_REPO,
     ODOO_PORTS,
+    SERVICE_PORTS,
+    VERSION_SUBDIRS,
+    WORKSPACE_DIRS,
 )
 from odoo_bootstrap.core.logger import get_logger
 from odoo_bootstrap.docker.docker_service import DockerService
@@ -131,7 +129,7 @@ def _create_version_dirs(workspace: Path, versions: list[int]) -> None:
 
 
 def _clone_odoo_sources(workspace: Path, versions: list[int]) -> None:
-    from odoo_bootstrap.utils.git import clone_or_pull, is_git_repo
+    from odoo_bootstrap.utils.git import clone_or_pull
 
     for v in versions:
         source_dir = workspace / "versions" / str(v) / "source"

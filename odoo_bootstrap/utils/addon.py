@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from typing import Optional
 
 from odoo_bootstrap.core.logger import get_logger
 
@@ -29,7 +28,7 @@ class AddonManifest:
         self.external_dependencies = data.get("external_dependencies", {})
         self.raw = data
 
-    def get_odoo_version(self) -> Optional[int]:
+    def get_odoo_version(self) -> int | None:
         """Extract major Odoo version from manifest version string (e.g. '19.0.1.0.0' → 19)."""
         if self.version:
             parts = self.version.split(".")
@@ -54,7 +53,7 @@ class AddonManifest:
         return self.external_dependencies.get("bin", [])
 
 
-def parse_manifest(addon_dir: Path) -> Optional[AddonManifest]:
+def parse_manifest(addon_dir: Path) -> AddonManifest | None:
     """Parse __manifest__.py from an addon directory."""
     manifest_path = addon_dir / "__manifest__.py"
     if not manifest_path.exists():
@@ -86,7 +85,7 @@ def find_addons(directory: Path) -> list[AddonManifest]:
 def check_addons_compatibility(
     addons_dir: Path,
     odoo_version: int,
-) -> list[tuple[str, bool, Optional[int]]]:
+) -> list[tuple[str, bool, int | None]]:
     """
     Check all addons in a directory for version compatibility.
     Returns list of (name, compatible, declared_version).

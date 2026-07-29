@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from odoo_bootstrap.core.exceptions import GitError
 from odoo_bootstrap.core.logger import get_logger
@@ -17,8 +16,8 @@ logger = get_logger("git")
 def clone_or_pull(
     repo_url: str,
     target_dir: Path,
-    branch: Optional[str] = None,
-    depth: Optional[int] = None,
+    branch: str | None = None,
+    depth: int | None = None,
 ) -> str:
     """
     Clone a repository if not present, or pull if already cloned.
@@ -35,8 +34,8 @@ def clone_or_pull(
 def _git_clone(
     repo_url: str,
     target_dir: Path,
-    branch: Optional[str],
-    depth: Optional[int],
+    branch: str | None,
+    depth: int | None,
 ) -> str:
     cmd = ["git", "clone", "--single-branch"]
     if branch:
@@ -48,7 +47,7 @@ def _git_clone(
     return "cloned"
 
 
-def _git_pull(target_dir: Path, branch: Optional[str]) -> str:
+def _git_pull(target_dir: Path, branch: str | None) -> str:
     if branch:
         _run(["git", "checkout", branch], cwd=target_dir)
     result = subprocess.run(
@@ -65,7 +64,7 @@ def _git_pull(target_dir: Path, branch: Optional[str]) -> str:
     return "pulled"
 
 
-def get_current_branch(repo_dir: Path) -> Optional[str]:
+def get_current_branch(repo_dir: Path) -> str | None:
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -80,7 +79,7 @@ def get_current_branch(repo_dir: Path) -> Optional[str]:
     return None
 
 
-def get_last_commit(repo_dir: Path) -> Optional[str]:
+def get_last_commit(repo_dir: Path) -> str | None:
     try:
         result = subprocess.run(
             ["git", "log", "-1", "--format=%h %s"],
@@ -99,7 +98,7 @@ def is_git_repo(path: Path) -> bool:
     return (path / ".git").exists()
 
 
-def _run(cmd: list[str], cwd: Optional[Path] = None) -> None:
+def _run(cmd: list[str], cwd: Path | None = None) -> None:
     result = subprocess.run(
         cmd,
         cwd=str(cwd) if cwd else None,

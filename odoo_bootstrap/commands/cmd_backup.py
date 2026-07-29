@@ -14,7 +14,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from odoo_bootstrap.core.exceptions import BackupError, ProjectError
 from odoo_bootstrap.core.logger import get_logger
-from odoo_bootstrap.utils.database import pg_dump, pg_restore, create_database, drop_database
+from odoo_bootstrap.utils.database import create_database, drop_database, pg_dump, pg_restore
 
 logger = get_logger("backup")
 console = Console()
@@ -50,7 +50,7 @@ def run_backup(name: str, config_manager, label: str = "") -> Path:
             task = progress.add_task(f"Dumping database {project.db.name}...", total=None)
             db_dump_path = str(staging / BACKUP_DB_FILENAME)
             pg_dump(project.db, db_dump_path)
-            progress.update(task, description=f"[green]✓ Database dumped")
+            progress.update(task, description="[green]✓ Database dumped")
 
             # ── Copy filestore ────────────────────────────────────────────────
             if project.filestore_dir.exists():
@@ -71,13 +71,13 @@ def run_backup(name: str, config_manager, label: str = "") -> Path:
             task4 = progress.add_task("Compressing archive...", total=None)
             with tarfile.open(archive_path, "w:gz") as tar:
                 tar.add(staging, arcname=name)
-            progress.update(task4, description=f"[green]✓ Archive created")
+            progress.update(task4, description="[green]✓ Archive created")
 
         finally:
             shutil.rmtree(staging, ignore_errors=True)
 
     size_mb = archive_path.stat().st_size / (1024 * 1024)
-    console.print(f"[green bold]✓ Backup complete[/green bold]")
+    console.print("[green bold]✓ Backup complete[/green bold]")
     console.print(f"  Archive: [cyan]{archive_path}[/cyan]")
     console.print(f"  Size:    [cyan]{size_mb:.1f} MB[/cyan]")
     return archive_path
@@ -165,6 +165,7 @@ def list_backups(name: str, config_manager) -> list[Path]:
 def _fix_permissions(directory: Path) -> None:
     """Set ownership to current user recursively."""
     import os
+
     uid = os.getuid()
     gid = os.getgid()
     for path in directory.rglob("*"):
