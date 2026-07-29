@@ -331,18 +331,30 @@ def cmd_sync_addons(
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Xem trước, không copy thực tế.",
+        help="Xem trước, không thay đổi thực tế.",
+    ),
+    keep_duplicates: bool = typer.Option(
+        False,
+        "--keep-duplicates",
+        help="Không xóa addon trùng với Odoo core.",
     ),
 ) -> None:
     """
     Tự động scan ZIP/folder addon, phát hiện version Odoo,
-    copy vào đúng custom_addons của project. Trùng tên thì bỏ qua.
+    copy vào đúng custom_addons của project.
+
+    Tính năng:
+    - Hỗ trợ ZIP và folder
+    - Đoán version qua manifest, Python syntax, XML pattern, dependencies
+    - Kiểm tra trùng với Odoo core/enterprise → xóa khỏi source
+    - Trùng tên trong project → bỏ qua
 
     Ví dụ:
       odoo-bootstrap sync-addons
       odoo-bootstrap sync-addons --dry-run
       odoo-bootstrap sync-addons --project kh_enterprise
       odoo-bootstrap sync-addons --source ~/Downloads/my_modules/
+      odoo-bootstrap sync-addons --keep-duplicates
     """
     from pathlib import Path as _Path
     from odoo_bootstrap.commands.cmd_sync_addons import run_sync_addons
@@ -353,6 +365,7 @@ def cmd_sync_addons(
         source_dir=src,
         project_name=project,
         dry_run=dry_run,
+        remove_core_duplicates=not keep_duplicates,
     )
 
 if __name__ == "__main__":
