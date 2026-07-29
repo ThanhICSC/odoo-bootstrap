@@ -125,16 +125,21 @@ def cmd_status() -> None:
 
 @app.command("create-project")
 def cmd_create_project(
-    name: str = typer.Argument(..., help="Project name (alphanumeric, underscore, hyphen)."),
-    version: int = typer.Option(..., "--version", "-v", help="Odoo version (17, 18, 19)."),
-    db_name: str = typer.Option("", help="Database name (default: odoo_<name>_<version>)."),
+    name: str = typer.Argument(..., help="Tên project (chữ, số, gạch dưới, gạch ngang)."),
+    version: int = typer.Option(..., "--version", "-v", help="Phiên bản Odoo (17, 18, 19)."),
+    edition: str = typer.Option("auto", "--edition", "-e", help="enterprise | community | auto"),
+    port: int = typer.Option(0, "--port", help="Port tùy chỉnh (mặc định: tự động)."),
+    db_name: str = typer.Option("", help="Tên database (mặc định: odoo_<name>_<version>)."),
     db_user: str = typer.Option("odoo", help="PostgreSQL user."),
     db_password: str = typer.Option("odoo", help="PostgreSQL password."),
 ) -> None:
     """
-    Create a new Odoo project with full configuration.
+    Tạo project Odoo mới với đầy đủ cấu hình.
 
-    Example: odoo-bootstrap create-project customer_a --version 19
+    Ví dụ:
+      odoo-bootstrap create-project kh_a --version 19 --edition enterprise
+      odoo-bootstrap create-project kh_b --version 19 --edition community
+      odoo-bootstrap create-project kh_c --version 19 --edition enterprise --port 8071
     """
     from odoo_bootstrap.commands.cmd_project import run_create_project
 
@@ -145,6 +150,8 @@ def cmd_create_project(
         db_name=db_name,
         db_user=db_user,
         db_password=db_password,
+        port=port,
+        edition=edition,
     )
 
 
