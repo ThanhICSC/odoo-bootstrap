@@ -376,7 +376,6 @@ def run_ai_fix(addon_path: Path, target_version: int, config_manager) -> None:
         ],
         cwd=str(addon_path),
         capture_output=False,
-        env=env2,
     )
 
     console.print(f"\n[green]✓ AI Fix hoàn tất: {addon_path.name}[/green]")
