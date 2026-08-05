@@ -389,5 +389,100 @@ def cmd_sync_addons(
     )
 
 
+# ── ai-setup ──────────────────────────────────────────────────────────────────
+
+
+@app.command("ai-setup")
+def cmd_ai_setup(
+    model: str = typer.Option(
+        "qwen2.5-coder:7b",
+        "--model",
+        "-m",
+        help="Ollama model để dùng (mặc định: qwen2.5-coder:7b, ~4.7GB RAM).",
+    ),
+) -> None:
+    """
+    Cài đặt AI stack hoàn toàn miễn phí:
+    Ollama + qwen2.5-coder (local model) + Aider + Open WebUI.
+
+    Chỉ cần chạy 1 lần. Không cần API key, không tốn tiền.
+    Model chạy 100% trên máy bạn, code không gửi ra ngoài.
+    """
+    from odoo_bootstrap.commands.cmd_ai import run_ai_setup
+
+    run_ai_setup(model=model)
+
+
+# ── ai ────────────────────────────────────────────────────────────────────────
+
+
+@app.command("ai")
+def cmd_ai(
+    project: str = typer.Argument(..., help="Tên project (vd: kh19ce)."),
+) -> None:
+    """
+    Mở AI coding assistant cho project — viết module Odoo theo yêu cầu.
+
+    AI sẽ trỏ vào custom_addons của project, hiểu đúng version Odoo,
+    tự commit mỗi thay đổi vào git.
+
+    Ví dụ dùng trong Aider:
+      /ask Tạo module quản lý hợp đồng khách hàng
+      /ask Thêm báo cáo doanh thu theo tháng
+    """
+    from odoo_bootstrap.commands.cmd_ai import run_ai
+
+    run_ai(project_name=project, config_manager=get_config_manager())
+
+
+# ── ai-fix ────────────────────────────────────────────────────────────────────
+
+
+@app.command("ai-fix")
+def cmd_ai_fix(
+    addon: str = typer.Argument(..., help="Tên hoặc đường dẫn module cần sửa."),
+    target: int = typer.Option(..., "--target", "-t", help="Version Odoo đích (17/18/19)."),
+    project: Optional[str] = typer.Option(
+        None, "--project", "-p", help="Tìm module trong project này."
+    ),
+) -> None:
+    """
+    Tự động sửa module Odoo sang version mới.
+
+    Chạy OCA migrator trước, sau đó Aider AI fix các lỗi còn lại.
+
+    Ví dụ:
+      odoo-bootstrap ai-fix my_module --target 19
+      odoo-bootstrap ai-fix my_module --target 19 --project kh19ce
+    """
+    from pathlib import Path as _Path
+
+    from odoo_bootstrap.commands.cmd_ai import run_ai_fix
+
+    cfg = get_config_manager()
+
+    # Tìm đường dẫn module
+    addon_path = _Path(addon)
+    if not addon_path.exists():
+        # Tìm trong project
+        if project:
+            proj = cfg.get_project(project)
+            if proj:
+                addon_path = proj.custom_addons_dir / addon
+        # Tìm trong tất cả project
+        if not addon_path.exists():
+            for proj in cfg.list_projects():
+                candidate = proj.custom_addons_dir / addon
+                if candidate.exists():
+                    addon_path = candidate
+                    break
+
+    run_ai_fix(
+        addon_path=addon_path,
+        target_version=target,
+        config_manager=cfg,
+    )
+
+
 if __name__ == "__main__":
     app()
