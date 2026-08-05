@@ -41,6 +41,7 @@ services:
       PORT: 5432
       USER: ${POSTGRES_USER:-{{ db_user }}}
       PASSWORD: ${POSTGRES_PASSWORD:-{{ db_password }}}
+      DB: ${DB_NAME:-{{ db_name }}}
     ports:
       - "{{ odoo_port }}:8069"
       - "{{ longpoll_port }}:8072"

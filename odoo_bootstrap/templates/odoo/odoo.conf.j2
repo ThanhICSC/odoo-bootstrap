@@ -5,6 +5,7 @@ db_port = {{ db.port }}
 db_user = {{ db.user }}
 db_password = {{ db.password }}
 db_name = {{ db.name }}
+db_filter = ^{{ db.name }}$
 
 ; Addons
 addons_path = /usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons{% if '/mnt/enterprise' in addons_path %},/mnt/enterprise{% endif %}
