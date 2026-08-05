@@ -484,5 +484,55 @@ def cmd_ai_fix(
     )
 
 
+# ── osm-setup ─────────────────────────────────────────────────────────────────
+
+
+@app.command("osm-setup")
+def cmd_osm_setup() -> None:
+    """
+    Cài Viindoo odoo-semantic-server — AI hiểu Odoo ORM thực sự.
+
+    Clone repo, start Neo4j + pgvector, cài dependencies.
+    Chạy 1 lần. Sau đó dùng osm-index và osm-start.
+    """
+    from odoo_bootstrap.commands.cmd_osm import run_osm_setup
+
+    run_osm_setup()
+
+
+@app.command("osm-index")
+def cmd_osm_index(
+    project: str = typer.Argument(..., help="Tên project cần index (vd: kh19ce)."),
+) -> None:
+    """
+    Index custom_addons của project vào OSM semantic graph.
+
+    AI sẽ hiểu đúng ORM, fields, views của project này.
+    """
+    from odoo_bootstrap.commands.cmd_osm import run_osm_index
+
+    run_osm_index(project_name=project, config_manager=get_config_manager())
+
+
+@app.command("osm-start")
+def cmd_osm_start() -> None:
+    """
+    Start OSM MCP server — kết nối với Claude Code / VS Code / Cursor.
+
+    Sau khi start, thêm MCP server vào IDE với URL: http://localhost:8765
+    """
+    from odoo_bootstrap.commands.cmd_osm import run_osm_start
+
+    run_osm_start()
+
+
+@app.command("osm-status")
+def cmd_osm_status() -> None:
+    """Kiểm tra trạng thái OSM (Neo4j, pgvector, MCP server)."""
+    from odoo_bootstrap.commands.cmd_osm import run_osm_status
+
+    run_osm_status()
+
+
 if __name__ == "__main__":
     app()
