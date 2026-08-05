@@ -534,5 +534,125 @@ def cmd_osm_status() -> None:
     run_osm_status()
 
 
+# ── analyze ───────────────────────────────────────────────────────────────────
+
+
+@app.command("analyze")
+def cmd_analyze(
+    target: str = typer.Argument(..., help="Tên module hoặc project để phân tích."),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="File output .md (mặc định: in ra màn hình)."
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Hiện thêm methods."),
+    project: bool = typer.Option(
+        False, "--project", "-p", help="Phân tích toàn bộ project thay vì 1 module."
+    ),
+) -> None:
+    """
+    Phân tích module Odoo → xuất Markdown để paste vào Claude/Gemini.
+
+    Ví dụ:
+      odoo-bootstrap analyze biz_contract
+      odoo-bootstrap analyze kh19ce --project
+      odoo-bootstrap analyze biz_contract --output report.md
+    """
+    from pathlib import Path as _Path
+
+    from odoo_bootstrap.commands.cmd_analyze import run_analyze, run_analyze_project
+
+    cfg = get_config_manager()
+
+    if project:
+        run_analyze_project(target, cfg)
+    else:
+        # Tim module path
+        addon_path = _Path(target)
+        if not addon_path.exists():
+            for proj in cfg.list_projects():
+                candidate = proj.custom_addons_dir / target
+                if candidate.exists():
+                    addon_path = candidate
+                    break
+
+        out = _Path(output) if output else None
+        run_analyze(addon_path, output_file=out, verbose=verbose)
+
+
+# ── diagnose ──────────────────────────────────────────────────────────────────
+
+
+@app.command("diagnose")
+def cmd_diagnose(
+    project: Optional[str] = typer.Argument(None, help="Tên project (tùy chọn)."),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="File output .md."),
+    tail: int = typer.Option(100, "--tail", help="Số dòng log cuối cùng."),
+) -> None:
+    """
+    Thu thập thông tin hệ thống + logs → paste vào AI phân tích lỗi.
+
+    Ví dụ:
+      odoo-bootstrap diagnose kh19ce
+      odoo-bootstrap diagnose kh19ce --tail 200 --output bug_report.md
+    """
+    from pathlib import Path as _Path
+
+    from odoo_bootstrap.commands.cmd_diagnose import run_diagnose
+
+    out = _Path(output) if output else None
+    run_diagnose(
+        project_name=project,
+        config_manager=get_config_manager(),
+        output_file=out,
+        tail_lines=tail,
+    )
+
+
+# ── scaffold ──────────────────────────────────────────────────────────────────
+
+
+@app.command("scaffold")
+def cmd_scaffold(
+    name: str = typer.Argument(..., help="Tên module (snake_case, vd: biz_contract)."),
+    version: int = typer.Option(..., "--version", "-v", help="Odoo version (17/18/19)."),
+    project: Optional[str] = typer.Option(
+        None, "--project", "-p", help="Tạo thẳng vào custom_addons của project."
+    ),
+    summary: str = typer.Option("", "--summary", "-s", help="Mô tả ngắn về module."),
+    depends: str = typer.Option("base", "--depends", help="Dependencies, phân cách bằng dấu phẩy."),
+) -> None:
+    """
+    Tạo module Odoo chuẩn OCA với đầy đủ cấu trúc.
+
+    Ví dụ:
+      odoo-bootstrap scaffold biz_contract --version 19
+      odoo-bootstrap scaffold biz_contract --version 19 --project kh19ce
+      odoo-bootstrap scaffold biz_hr_advance --version 19 --depends "hr,account"
+    """
+
+    from odoo_bootstrap.commands.cmd_scaffold import run_scaffold
+
+    cfg = get_config_manager()
+    deps = [d.strip() for d in depends.split(",") if d.strip()]
+
+    if project:
+        proj = cfg.get_project(project)
+        if not proj:
+            console.print(f"[red]Project '{project}' không tồn tại[/red]")
+            raise typer.Exit(1)
+        output_dir = proj.custom_addons_dir
+    else:
+        from odoo_bootstrap.core.constants import WORKSPACE_ROOT
+
+        output_dir = WORKSPACE_ROOT / "shared" / "scaffolds"
+
+    run_scaffold(
+        module_name=name,
+        odoo_version=version,
+        output_dir=output_dir,
+        summary=summary,
+        depends=deps,
+    )
+
+
 if __name__ == "__main__":
     app()
