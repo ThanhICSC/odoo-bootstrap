@@ -6,7 +6,6 @@ All commands are registered here via Typer.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -443,7 +442,7 @@ def cmd_ai(
 def cmd_ai_fix(
     addon: str = typer.Argument(..., help="Tên hoặc đường dẫn module cần sửa."),
     target: int = typer.Option(..., "--target", "-t", help="Version Odoo đích (17/18/19)."),
-    project: Optional[str] = typer.Option(
+    project: str | None = typer.Option(
         None, "--project", "-p", help="Tìm module trong project này."
     ),
 ) -> None:
