@@ -6,7 +6,6 @@ All commands are registered here via Typer.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -541,7 +540,7 @@ def cmd_osm_status() -> None:
 @app.command("analyze")
 def cmd_analyze(
     target: str = typer.Argument(..., help="Tên module hoặc project để phân tích."),
-    output: Optional[str] = typer.Option(
+    output: str | None = typer.Option(
         None, "--output", "-o", help="File output .md (mặc định: in ra màn hình)."
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Hiện thêm methods."),
@@ -584,8 +583,8 @@ def cmd_analyze(
 
 @app.command("diagnose")
 def cmd_diagnose(
-    project: Optional[str] = typer.Argument(None, help="Tên project (tùy chọn)."),
-    output: Optional[str] = typer.Option(None, "--output", "-o", help="File output .md."),
+    project: str | None = typer.Argument(None, help="Tên project (tùy chọn)."),
+    output: str | None = typer.Option(None, "--output", "-o", help="File output .md."),
     tail: int = typer.Option(100, "--tail", help="Số dòng log cuối cùng."),
 ) -> None:
     """
@@ -615,7 +614,7 @@ def cmd_diagnose(
 def cmd_scaffold(
     name: str = typer.Argument(..., help="Tên module (snake_case, vd: biz_contract)."),
     version: int = typer.Option(..., "--version", "-v", help="Odoo version (17/18/19)."),
-    project: Optional[str] = typer.Option(
+    project: str | None = typer.Option(
         None, "--project", "-p", help="Tạo thẳng vào custom_addons của project."
     ),
     summary: str = typer.Option("", "--summary", "-s", help="Mô tả ngắn về module."),
