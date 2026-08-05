@@ -38,6 +38,20 @@ ODOO_SYSTEM_PROMPT = """You are an expert Odoo developer. Follow these rules str
 """
 
 
+def _find_aider() -> str:
+    """Tìm aider trong các vị trí phổ biến."""
+    candidates = [
+        Path.home() / ".local" / "bin" / "aider",
+        Path.home() / ".local" / "share" / "uv" / "tools" / "aider-chat" / "bin" / "aider",
+        Path("/usr/local/bin/aider"),
+        Path("/usr/bin/aider"),
+    ]
+    for p in candidates:
+        if p.exists():
+            return str(p)
+    return ""
+
+
 def _check_ollama() -> bool:
     """Kiểm tra Ollama đã cài chưa."""
     return shutil.which("ollama") is not None
@@ -213,7 +227,8 @@ def run_ai(project_name: str, config_manager) -> None:
     addons_dir = proj.custom_addons_dir
     addons_dir.mkdir(parents=True, exist_ok=True)
 
-    aider_bin = shutil.which("aider") or ""
+    # Tim aider trong PATH va cac vi tri pho bien
+    aider_bin = shutil.which("aider") or _find_aider()
     if not aider_bin:
         console.print("[red]Aider chưa cài. Chạy: uv tool install aider-chat[/red]")
         return
