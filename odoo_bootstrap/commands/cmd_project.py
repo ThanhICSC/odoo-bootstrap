@@ -72,7 +72,7 @@ def run_create_project(
             f"Project name '{name}' là không hợp lệ. Dùng chữ thường, số, gạch dưới."
         )
 
-    resolved_db = db_name or f"odoo_{name}_{version}"
+    resolved_db = db_name or name
 
     # Chon port tu dong
     used_ports = _get_used_ports(config_manager)
