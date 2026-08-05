@@ -283,9 +283,7 @@ def run_ai(project_name: str, config_manager) -> None:
     cmd = [
         aider_bin,
         "--model",
-        f"ollama/{DEFAULT_MODEL}",
-        "--ollama-api-base",
-        OLLAMA_BASE_URL,
+        f"ollama_chat/{DEFAULT_MODEL}",
         "--read",
         str(prompt_file),
         "--auto-commits",
@@ -369,9 +367,7 @@ def run_ai_fix(addon_path: Path, target_version: int, config_manager) -> None:
         [
             aider_bin,
             "--model",
-            f"ollama/{DEFAULT_MODEL}",
-            "--ollama-api-base",
-            OLLAMA_BASE_URL,
+            f"ollama_chat/{DEFAULT_MODEL}",
             "--message",
             fix_prompt,
             "--auto-commits",
@@ -380,6 +376,7 @@ def run_ai_fix(addon_path: Path, target_version: int, config_manager) -> None:
         ],
         cwd=str(addon_path),
         capture_output=False,
+        env=env2,
     )
 
     console.print(f"\n[green]✓ AI Fix hoàn tất: {addon_path.name}[/green]")
