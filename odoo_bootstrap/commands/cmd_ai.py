@@ -119,22 +119,25 @@ def run_ai_setup(model: str = DEFAULT_MODEL) -> None:
         console.print(f"[green]✓ Model {model} đã tải xong[/green]")
 
     # ── Bước 4: Cài Aider ─────────────────────────────────────────────────────
-    venv = Path.home() / ".venv-odoo-bootstrap"
-    pip = str(venv / "bin" / "pip")
-    aider_bin = venv / "bin" / "aider"
-
-    if aider_bin.exists():
+    # Tim aider: uu tien PATH (uv tool install), sau do venv
+    aider_bin_str = shutil.which("aider")
+    if aider_bin_str:
         console.print("[green]✓ Aider đã cài sẵn[/green]")
     else:
-        console.print("[cyan]→ Cài Aider...[/cyan]")
-        result = subprocess.run(
-            [pip, "install", "-q", "aider-chat"],
-            capture_output=False,
-        )
-        if result.returncode == 0:
+        console.print("[cyan]→ Cài Aider qua uv...[/cyan]")
+        uv_bin = shutil.which("uv")
+        if uv_bin:
+            result = subprocess.run([uv_bin, "tool", "install", "aider-chat"])
+        else:
+            result = subprocess.run(
+                ["pip", "install", "--break-system-packages", "-q", "aider-chat"],
+                capture_output=False,
+            )
+        aider_bin_str = shutil.which("aider")
+        if aider_bin_str:
             console.print("[green]✓ Aider đã cài[/green]")
         else:
-            console.print("[red]✗ Cài Aider thất bại[/red]")
+            console.print("[red]✗ Cài Aider thất bại. Chạy: uv tool install aider-chat[/red]")
             return
 
     # ── Bước 5: Cài Open WebUI (Docker) ──────────────────────────────────────
@@ -210,11 +213,9 @@ def run_ai(project_name: str, config_manager) -> None:
     addons_dir = proj.custom_addons_dir
     addons_dir.mkdir(parents=True, exist_ok=True)
 
-    venv = Path.home() / ".venv-odoo-bootstrap"
-    aider_bin = str(venv / "bin" / "aider")
-
-    if not Path(aider_bin).exists():
-        console.print("[red]Aider chưa cài. Chạy: odoo-bootstrap ai-setup[/red]")
+    aider_bin = shutil.which("aider") or ""
+    if not aider_bin:
+        console.print("[red]Aider chưa cài. Chạy: uv tool install aider-chat[/red]")
         return
 
     if not _ollama_running():
