@@ -65,8 +65,12 @@ def run_create_project(
     """Create a new Odoo project with full configuration."""
     renderer = TemplateRenderer()
 
+    # Docker compose yêu cầu lowercase
+    name = name.lower()
     if not name.replace("_", "").replace("-", "").isalnum():
-        raise ProjectError(f"Project name '{name}' là không hợp lệ.")
+        raise ProjectError(
+            f"Project name '{name}' là không hợp lệ. Dùng chữ thường, số, gạch dưới."
+        )
 
     resolved_db = db_name or f"odoo_{name}_{version}"
 

@@ -73,7 +73,7 @@ def run_logs(name: str, config_manager, follow: bool = False, tail: int = 100) -
         "docker",
         "compose",
         "-p",
-        name,
+        name.lower(),
         "-f",
         str(compose_file),
         "logs",
