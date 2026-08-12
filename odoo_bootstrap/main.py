@@ -654,5 +654,34 @@ def cmd_scaffold(
     )
 
 
+# ── mcp-setup ────────────────────────────────────────────────────────────────
+
+
+@app.command("mcp-setup")
+def cmd_mcp_setup() -> None:
+    """
+    Cài đặt MCP server để Claude Desktop đọc được source Odoo local.
+
+    Tự động cài Node.js, cấu hình filesystem MCP server,
+    ghi ~/.config/claude/claude_desktop_config.json.
+
+    Sau khi chạy: khởi động lại Claude Desktop là dùng được.
+    """
+    from odoo_bootstrap.commands.cmd_mcp import run_mcp_setup
+
+    run_mcp_setup()
+
+
+# ── mcp-status ───────────────────────────────────────────────────────────────
+
+
+@app.command("mcp-status")
+def cmd_mcp_status() -> None:
+    """Kiểm tra trạng thái MCP server và cấu hình Claude Desktop."""
+    from odoo_bootstrap.commands.cmd_mcp import run_mcp_status
+
+    run_mcp_status()
+
+
 if __name__ == "__main__":
     app()
