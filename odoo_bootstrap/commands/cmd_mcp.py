@@ -1,3 +1,14 @@
+"""
+odoo-bootstrap mcp-setup / mcp-status:
+Cài mart337i/odoo-dev-mcp + odoo-skills cho Claude Desktop.
+
+Không cần Neo4j, không cần database phức tạp:
+- 302+ trang docs Odoo searchable (v17, v18, v19)
+- Code generation version-aware
+- OWL frontend scaffolds
+- Kết nối thẳng Claude Desktop / Claude Code
+"""
+
 from __future__ import annotations
 
 import json
@@ -6,110 +17,161 @@ import subprocess
 from pathlib import Path
 
 from rich.console import Console
+from rich.panel import Panel
 
+from odoo_bootstrap.core.constants import WORKSPACE_ROOT
+from odoo_bootstrap.core.logger import get_logger
+
+logger = get_logger("mcp")
 console = Console()
 
-CLAUDE_CONFIG_PATH = Path.home() / ".config" / "claude" / "claude_desktop_config.json"
-ODOO_DEV = Path.home() / "odoo-dev"
-MCP_ALLOWED_PATHS = [
-    str(ODOO_DEV / "versions" / "19" / "source" / "addons"),
-    str(ODOO_DEV / "versions" / "19" / "enterprise"),
-    str(ODOO_DEV / "versions" / "18" / "source" / "addons"),
-    str(ODOO_DEV / "versions" / "17" / "source" / "addons"),
-    str(Path.home() / "ownCloud" / "Z - Other" / "modules"),
-]
+MCP_DIR = WORKSPACE_ROOT / "shared" / "mcp"
+DEV_MCP_DIR = MCP_DIR / "odoo-dev-mcp"
+SKILLS_DIR = MCP_DIR / "odoo-skills"
+
+DEV_MCP_REPO = "https://github.com/mart337i/odoo-dev-mcp.git"
+SKILLS_REPO = "https://github.com/mart337i/odoo-skills.git"
+
+CLAUDE_CONFIG = Path.home() / ".config" / "Claude" / "claude_desktop_config.json"
 
 
-def _check_node():
-    return shutil.which("node") is not None
-
-
-def _install_node():
-    console.print("[cyan]-> Cai Node.js LTS...[/cyan]")
-    try:
-        subprocess.run(
-            "curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -",
-            shell=True, check=True,
-        )
-        subprocess.run(["sudo", "apt", "install", "-y", "nodejs"], check=True)
-        version = subprocess.check_output(["node", "--version"], text=True).strip()
-        console.print(f"[green]✓ Node.js: {version}[/green]")
-        return True
-    except subprocess.CalledProcessError as e:
-        console.print(f"[red]✗ Cai that bai: {e}[/red]")
-        return False
-
-
-def _write_claude_config():
-    existing = [p for p in MCP_ALLOWED_PATHS if Path(p).exists()]
-    missing = [p for p in MCP_ALLOWED_PATHS if not Path(p).exists()]
-
-    if missing:
-        console.print("[yellow]⚠ Bo qua (chua ton tai):[/yellow]")
-        for p in missing:
-            console.print(f"  [dim]{p}[/dim]")
-
-    if not existing:
-        console.print("[red]✗ Khong co thu muc nao ton tai.[/red]")
-        return
-
-    config = {}
-    if CLAUDE_CONFIG_PATH.exists():
-        try:
-            config = json.loads(CLAUDE_CONFIG_PATH.read_text())
-        except json.JSONDecodeError:
-            pass
-
-    config.setdefault("mcpServers", {})
-    config["mcpServers"]["filesystem"] = {
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem"] + existing,
-    }
-
-    CLAUDE_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CLAUDE_CONFIG_PATH.write_text(json.dumps(config, indent=2, ensure_ascii=False))
-    console.print(f"[green]✓ Da ghi: {CLAUDE_CONFIG_PATH}[/green]")
-    for p in existing:
-        console.print(f"  • {p}")
-
-
-def run_mcp_setup():
-    console.print()
-    console.print("[bold cyan]━━ MCP Setup ━━[/bold cyan]")
-
-    if _check_node():
-        v = subprocess.check_output(["node", "--version"], text=True).strip()
-        console.print(f"[green]✓ Node.js: {v}[/green]")
+def _clone_or_pull(repo: str, target: Path, name: str) -> None:
+    if (target / ".git").exists():
+        console.print(f"[dim]Pulling {name}...[/dim]")
+        subprocess.run(["git", "pull", "--ff-only"], cwd=target, capture_output=True, check=False)
     else:
-        if not _install_node():
+        console.print(f"[cyan]-> Clone {name}...[/cyan]")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "clone", "--depth", "1", repo, str(target)], check=True)
+    console.print(f"[green]OK {name}[/green]")
+
+
+def _install_deps(target: Path) -> None:
+    uv_bin = shutil.which("uv")
+    venv = Path.home() / ".venv-odoo-bootstrap"
+    pip = str(venv / "bin" / "pip") if (venv / "bin" / "pip").exists() else "pip3"
+    console.print("[cyan]-> Cai dependencies...[/cyan]")
+    if uv_bin and (target / "pyproject.toml").exists():
+        r = subprocess.run([uv_bin, "sync"], cwd=target, capture_output=True, text=True)
+        if r.returncode == 0:
+            console.print("[green]OK uv sync[/green]")
             return
+    req = target / "requirements.txt"
+    if req.exists():
+        subprocess.run([pip, "install", "-q", "-r", str(req)], check=False)
+    subprocess.run([pip, "install", "-q", "mcp[cli]"], check=False)
+    console.print("[green]OK pip install[/green]")
 
-    _write_claude_config()
 
-    console.print()
-    console.print("[bold green]✓ Xong! Khoi dong lai Claude Desktop.[/bold green]")
-    console.print("  Settings -> Developer -> kiem tra MCP [cyan]filesystem[/cyan] Active")
+def _find_server_py(target: Path) -> Path | None:
+    for c in [
+        target / "src" / "odoo_mcp" / "server.py",
+        target / "odoo_mcp_server.py",
+        target / "server.py",
+        target / "src" / "server.py",
+    ]:
+        if c.exists():
+            return c
+    return None
 
 
-def run_mcp_status():
-    console.print()
-    console.print("[bold cyan]━━ MCP Status ━━[/bold cyan]")
-
-    if _check_node():
-        v = subprocess.check_output(["node", "--version"], text=True).strip()
-        console.print(f"[green]✓ Node.js: {v}[/green]")
-    else:
-        console.print("[red]✗ Node.js chua cai[/red]")
-
-    if CLAUDE_CONFIG_PATH.exists():
+def _update_claude_config(server_py: Path) -> None:
+    CLAUDE_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    config: dict = {}
+    if CLAUDE_CONFIG.exists():
         try:
-            config = json.loads(CLAUDE_CONFIG_PATH.read_text())
-            servers = config.get("mcpServers", {})
-            console.print(f"[green]✓ Config: {CLAUDE_CONFIG_PATH}[/green]")
-            for name in servers:
-                console.print(f"  • [cyan]{name}[/cyan]")
-        except json.JSONDecodeError:
-            console.print("[red]✗ Config loi JSON.[/red]")
+            config = json.loads(CLAUDE_CONFIG.read_text(encoding="utf-8"))
+        except Exception:
+            config = {}
+    if "mcpServers" not in config:
+        config["mcpServers"] = {}
+
+    uv_bin = shutil.which("uv")
+    venv = Path.home() / ".venv-odoo-bootstrap"
+    python_bin = str(venv / "bin" / "python") if (venv / "bin" / "python").exists() else "python3"
+    env_vars = {
+        "ODOO_SOURCE": str(WORKSPACE_ROOT / "versions" / "19" / "source"),
+        "ODOO_VERSION": "19.0",
+    }
+    if uv_bin and (DEV_MCP_DIR / "pyproject.toml").exists():
+        config["mcpServers"]["odoo-dev"] = {
+            "command": uv_bin,
+            "args": ["run", "--project", str(DEV_MCP_DIR), str(server_py)],
+            "env": env_vars,
+        }
     else:
-        console.print("[red]✗ Chua co config. Chay mcp-setup truoc.[/red]")
+        config["mcpServers"]["odoo-dev"] = {
+            "command": python_bin,
+            "args": [str(server_py)],
+            "env": env_vars,
+        }
+    CLAUDE_CONFIG.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+    console.print(f"[green]OK Claude config: {CLAUDE_CONFIG}[/green]")
+
+
+def run_mcp_setup() -> None:
+    """Cai mart337i/odoo-dev-mcp + odoo-skills, config Claude Desktop."""
+    console.print(
+        Panel(
+            "[bold cyan]MCP Dev Setup[/bold cyan]\n\n"
+            "  mart337i/odoo-dev-mcp  - 302+ trang docs Odoo v17/18/19\n"
+            "  mart337i/odoo-skills   - skills: debug, migrate, review\n\n"
+            "Khong can Neo4j. Khong can DB phuc tap.",
+            title="odoo-bootstrap mcp-setup",
+        )
+    )
+    _clone_or_pull(DEV_MCP_REPO, DEV_MCP_DIR, "odoo-dev-mcp")
+    _clone_or_pull(SKILLS_REPO, SKILLS_DIR, "odoo-skills")
+    _install_deps(DEV_MCP_DIR)
+    server_py = _find_server_py(DEV_MCP_DIR)
+    if not server_py:
+        console.print(f"[yellow]Khong tim thay server.py. Kiem tra: {DEV_MCP_DIR}[/yellow]")
+        return
+    _update_claude_config(server_py)
     console.print()
+    console.print(
+        Panel(
+            "[bold green]MCP Dev xong![/bold green]\n\n"
+            "[yellow]Restart Claude Desktop de load server.[/yellow]\n\n"
+            "Sau khi restart hoi Claude:\n"
+            "  'Search Odoo docs fields.Many2one version 19'\n"
+            "  'Generate sale.order model Odoo 19'\n"
+            "  'Create OWL component hien thi danh sach san pham'",
+            title="Hoan tat",
+        )
+    )
+
+
+def run_mcp_status() -> None:
+    """Kiem tra trang thai MCP dev tools."""
+    console.print("\n[bold]MCP Dev Status:[/bold]\n")
+    for name, path in [("odoo-dev-mcp", DEV_MCP_DIR), ("odoo-skills", SKILLS_DIR)]:
+        if (path / ".git").exists():
+            r = subprocess.run(
+                ["git", "log", "-1", "--format=%h %s"],
+                cwd=path,
+                capture_output=True,
+                text=True,
+            )
+            console.print(f"  [green]OK[/green] {name}: [dim]{r.stdout.strip()}[/dim]")
+        else:
+            console.print(f"  [red]X[/red] {name}: chua cai")
+    console.print()
+    if CLAUDE_CONFIG.exists():
+        try:
+            cfg = json.loads(CLAUDE_CONFIG.read_text())
+            servers = list(cfg.get("mcpServers", {}).keys())
+            console.print(f"  [green]OK[/green] Claude config: {servers}")
+        except Exception:
+            console.print("  [yellow]?[/yellow] Claude config: loi doc")
+    else:
+        console.print(f"  [yellow]?[/yellow] Claude config chua co: {CLAUDE_CONFIG}")
+    server_py = _find_server_py(DEV_MCP_DIR)
+    if server_py:
+        console.print(f"\n  Server: [cyan]{server_py}[/cyan]")
+    if SKILLS_DIR.exists():
+        skills = sorted(SKILLS_DIR.glob("*.md"))
+        if skills:
+            console.print(f"\n  Skills ({len(skills)} files):")
+            for s in skills[:6]:
+                console.print(f"    [dim]{s.name}[/dim]")
