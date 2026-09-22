@@ -151,10 +151,21 @@ async def run(gemini_key: str, headless: bool = False):
     print(f"URL: {ODOO_URL} | DB: {ODOO_DB}")
     print("=" * 60)
 
+    from browser_use import BrowserConfig
+    browser_config = BrowserConfig(
+        headless=headless,
+        disable_security=True,
+        extra_chromium_args=[
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+        ]
+    )
     agent = Agent(
         task=task,
         llm=llm,
         max_actions_per_step=10,
+        browser_config=browser_config,
     )
 
     result = await agent.run(max_steps=150)
