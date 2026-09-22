@@ -134,7 +134,7 @@ async def run(gemini_key: str, headless: bool = False):
     os.environ["GEMINI_API_KEY"] = gemini_key
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
+        model="gemini-3.6-flash",
         google_api_key=gemini_key,
         temperature=0.1,
     )
